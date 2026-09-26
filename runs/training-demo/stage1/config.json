@@ -1,0 +1,38 @@
+{
+  "seed": 0,
+  "scenarios": [
+    "hold",
+    "follow"
+  ],
+  "config": {
+    "drones": 8,
+    "dt": 0.05,
+    "substeps": 5,
+    "duration": 24.0,
+    "radius": 0.18,
+    "spacing": 1.25,
+    "altitude": 3.0,
+    "stand_off": 3.0,
+    "max_speed": 3.0,
+    "max_accel": 5.0,
+    "response_time": 0.28,
+    "target_speed": 0.55,
+    "sensor_range": 7.0,
+    "neighbors": 6,
+    "obstacles": 6,
+    "noise": 0.0,
+    "dropout": 0.0,
+    "recovery_position": 0.35,
+    "recovery_velocity": 0.35,
+    "recovery_hold": 1.0
+  },
+  "total_steps_this_run": 10000,
+  "horizon": 128,
+  "epochs": 4,
+  "clone_steps": 0,
+  "clone_epochs": 15,
+  "resume": null,
+  "algorithm": "parameter-sharing IPPO; local critic; tanh Gaussian velocity actions",
+  "training_scenario_seeds": "0..999",
+  "resume_semantics": "weights and optimizer; fresh seeded episode"
+}

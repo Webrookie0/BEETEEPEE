@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SwarmFlow · Flight laboratory</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header><a class="brand" href="/" aria-label="SwarmFlow home"><span class="mark">╱╲</span> SwarmFlow<span class="version">LAB / 01</span></a><span class="header-note">COOPERATIVE FLIGHT SYSTEMS</span><span id="connection" class="connection">Connecting</span></header>
+  <main>
+    <section class="intro"><div><p class="eyebrow">FORMATION RECOVERY LABORATORY</p><h1>Move together.<br><span>Make room. Return.</span></h1><p class="description">Follow a reference target, yield to crossing objects,<br>and return to the same place in the formation.</p></div><div class="mission-stamp"><span>ACTIVE CONTROLLER</span><strong id="policy">Loading</strong><small>3D stabilized-flight model</small></div></section>
+    <div id="learning-note" class="learning-note" hidden><strong>RL evaluation mode</strong><p>You are viewing a saved neural policy. It may still drift or collide; this viewer does not train it. For the earlier flight demonstration, open <b>Launch SwarmFlow.command</b> and check that the active controller says <b>predictive baseline</b>.</p></div>
+    <div id="error" role="alert" hidden></div>
+    <section class="workspace">
+      <aside>
+        <div class="section-label"><span>01 / MISSION</span><span class="dot"></span></div>
+        <label for="scenario">Flight scenario</label>
+        <select id="scenario"><option value="crossing">Crossing object</option><option value="follow">Target following</option><option value="hold">Stationary formation</option><option value="head_on">Head-on object</option><option value="double_crossing">Repeated crossings</option><option value="slalom">Static obstacles</option><option value="turn">Turning target</option><option value="gust">Wind disturbance</option></select>
+        <div class="two"><div><label for="drones">Drones</label><select id="drones"><option>4</option><option selected>8</option><option>12</option><option>16</option><option>24</option><option>32</option></select></div><div><label for="seed">Scenario seed</label><input id="seed" type="number" value="7" min="0" max="4294967295"></div></div>
+        <div class="actions"><button id="play" class="primary" disabled>Start flight</button><button id="reset" class="secondary" disabled>Reset</button></div>
+        <button id="repeat" class="repeat" aria-pressed="false" disabled>Repeat flights: Off</button>
+        <p class="hint">Repeat starts flying and reruns the selected test automatically. Pause stops the loop. Run again restarts a completed test.</p>
+        <div class="separator"></div>
+        <div class="section-label"><span>02 / DISTURBANCE</span><span class="subtle">LIVE INPUT</span></div>
+        <label for="speed">Object speed <output id="speed-value">1.6 m/s</output></label><input id="speed" type="range" min="0.3" max="5" value="1.6" step="0.1">
+        <label for="radius">Object radius <output id="radius-value">0.7 m</output></label><input id="radius" type="range" min="0.2" max="1.5" value="0.7" step="0.1">
+        <button id="inject" class="inject" disabled>↗ &nbsp; Send a crossing object</button>
+        <button id="headon" class="text-button" disabled>Send from ahead →</button>
+        <p class="hint">Objects are non-cooperative. Drones must also avoid each other.</p>
+        <div class="separator"></div>
+        <div class="section-label">03 / RECOVERY RULE</div>
+        <p class="rule">All drones within <b>0.35 m</b> of their own slots, with velocity error below <b>0.35 m/s</b>, for <b>1 second</b> after the object exits.</p>
+      </aside>
+      <div class="flight-panel">
+        <div class="flight-toolbar"><div><span class="live-dot"></span><span id="phase">READY TO FLY</span></div><div class="view-buttons"><button id="orbit" class="selected">Orbit</button><button id="top">Top</button><button id="export">Save PNG</button></div></div>
+        <div class="viewport"><canvas id="world" aria-label="Interactive 3D swarm simulation: drag to orbit, scroll to zoom"></canvas><div class="viewport-title"><strong id="mission-title">Crossing object</strong><span id="simulation-time">T + 00.00 s</span></div><div class="scale">METERS · DRAG TO ORBIT · SCROLL TO ZOOM</div><div class="legend"><span><i class="drone-key"></i> Drone</span><span><i class="target-key"></i> Target</span><span><i class="slot-key"></i> Assigned slot</span><span><i class="object-key"></i> Object</span></div></div>
+        <div class="metrics"><div><span>LIVE SLOT ERROR</span><strong id="slot-error">—</strong><small>root mean square · m</small></div><div><span>MINIMUM CLEARANCE</span><strong id="clearance">—</strong><small>surface to surface · m</small></div><div><span>RECOVERED EVENTS</span><strong id="recovered">0 / 0</strong><small>completed / encountered</small></div><div><span>FLIGHT STATE</span><strong id="flight-state" class="word">Ready</strong><small id="state-note">Seed 7 · 8 agents</small></div></div>
+        <div class="timeline"><div><span>SLOT ERROR / m</span><small>Last 12 simulated seconds</small></div><canvas id="chart" aria-label="Live root mean square slot error in meters over simulation time in seconds"></canvas></div>
+      </div>
+    </section>
+    <footer><span>One target. Persistent slots. Local observations.</span><span id="model-note">Reduced-order dynamics · illustrative drone attitude · baseline control</span></footer>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
