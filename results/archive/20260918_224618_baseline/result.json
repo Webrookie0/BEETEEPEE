@@ -1,0 +1,20 @@
+{
+  "mode": "baseline",
+  "policy": "baseline",
+  "ckpt": null,
+  "seed": 0,
+  "dumped": "20260918_224618",
+  "model_dump": {
+    "latest": "D:\\Presonal Project\\BTP1_v1\\models\\latest.pt",
+    "best": "D:\\Presonal Project\\BTP1_v1\\models\\best.pt"
+  },
+  "gates": [
+    {
+      "test_id": 1,
+      "passed": false,
+      "error": 0.5,
+      "reason": "ok"
+    }
+  ],
+  "extra": {}
+}

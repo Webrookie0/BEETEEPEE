@@ -1,0 +1,20 @@
+{
+  "mode": "train",
+  "policy": "rl",
+  "ckpt": "D:\\Presonal Project\\BTP1_v1\\models\\latest.pt",
+  "seed": 0,
+  "dumped": "20260918_205058",
+  "model_dump": {
+    "latest": "D:\\Presonal Project\\BTP1_v1\\models\\latest.pt",
+    "best": "D:\\Presonal Project\\BTP1_v1\\models\\best.pt"
+  },
+  "gates": [
+    {
+      "passed": false,
+      "reason": "empty",
+      "error": 10.0,
+      "test_id": 1
+    }
+  ],
+  "extra": {}
+}

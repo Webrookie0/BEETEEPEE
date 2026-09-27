@@ -21,6 +21,13 @@ def run_episode(config, scenario, seed, controller, trace=False):
     return summary, frames
 
 
+def _success_rate(row):
+    if "success_rate" in row:
+        return row["success_rate"]
+    n = row.get("episodes") or 0
+    return None if n == 0 else 1.0 - row["failures"] / n
+
+
 def aggregate(episodes):
     result = {}
     for scenario in dict.fromkeys(e["scenario"] for e in episodes):
@@ -28,14 +35,56 @@ def aggregate(episodes):
         events = [(event, row) for row in rows for event in row["events"]]
         recovered = [event["recovery_s"] for event, row in events
                      if event["recovery_s"] is not None and not row["failure"]]
-        result[scenario] = {"episodes": len(rows), "failures": sum(bool(e["failure"]) for e in rows),
+        n = len(rows)
+        slot = np.array([e["slot_rmse_m"] for e in rows], dtype=float)
+        mean = float(np.mean(slot))
+        std = float(np.std(slot, ddof=1)) if n >= 2 else 0.0
+        failures = sum(bool(e["failure"]) for e in rows)
+        interval = None
+        if n >= 2:
+            half = 1.96 * std / float(np.sqrt(n))
+            interval = {"low": float(mean - half), "high": float(mean + half)}
+        result[scenario] = {"episodes": n, "failures": failures,
             "collisions": sum(e["collision"] for e in rows),
-            "mean_slot_rmse_m": float(np.mean([e["slot_rmse_m"] for e in rows])),
+            "success_rate": 1.0 - failures / n,
+            "mean_slot_rmse_m": mean,
+            "slot_rmse_std_m": std,
+            "slot_rmse_ci95_m": interval,
             "min_surface_clearance_m": min(e["min_surface_clearance_m"] for e in rows),
             "events": len(events), "recovered_events": len(recovered),
             "mean_recovery_s_conditional": float(np.mean(recovered)) if recovered else None,
             "max_recovery_s_conditional": max(recovered) if recovered else None}
     return result
+
+
+def compare_reports(paths, output="runs/compare.json"):
+    paths = [Path(p) for p in paths]
+    if len(paths) != 2:
+        raise ValueError("compare requires exactly two report paths")
+    loaded = []
+    for path in paths:
+        try:
+            loaded.append(json.loads(path.read_text()))
+        except json.JSONDecodeError as error:
+            raise ValueError(f"Invalid JSON in {path}: {error}") from error
+    left, right = (item.get("summary") or {} for item in loaded)
+    names = list(dict.fromkeys([*left, *right]))
+    summary = {}
+    for name in names:
+        a, b = left.get(name, {}), right.get(name, {})
+        success = [_success_rate(a), _success_rate(b)]
+        rmse = [a.get("mean_slot_rmse_m"), b.get("mean_slot_rmse_m")]
+        entry = {"success_rate": success, "mean_slot_rmse_m": rmse}
+        if None not in success:
+            entry["delta_success_rate"] = success[1] - success[0]
+        if None not in rmse:
+            entry["delta_mean_slot_rmse_m"] = rmse[1] - rmse[0]
+        summary[name] = entry
+    report = {"reports": [str(p) for p in paths], "summary": summary}
+    target = Path(output)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
+    return report
 
 
 def evaluate(config=None, scenarios=SCENARIOS, seeds=range(1000, 1003), policy="baseline", checkpoint=None,

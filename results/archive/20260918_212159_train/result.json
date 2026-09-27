@@ -1,0 +1,40 @@
+{
+  "mode": "train",
+  "policy": "rl",
+  "ckpt": "D:\\Presonal Project\\BTP1_v1\\models\\latest.pt",
+  "seed": 0,
+  "dumped": "20260918_212159",
+  "model_dump": {
+    "latest": "D:\\Presonal Project\\BTP1_v1\\models\\latest.pt",
+    "best": "D:\\Presonal Project\\BTP1_v1\\models\\best.pt"
+  },
+  "gates": [
+    {
+      "passed": false,
+      "reason": "collision_or_bounds",
+      "error": 1.604521995709178,
+      "test_id": 1
+    },
+    {
+      "passed": false,
+      "reason": "hold_failed",
+      "error": 1.6488224307318038,
+      "dist_ok": false,
+      "speed_ok": false,
+      "tilt_ok": true,
+      "space_ok": true,
+      "cap": 0.15,
+      "test_id": 2
+    },
+    {
+      "passed": false,
+      "reason": "collision_or_bounds",
+      "error": 3.5321858665035144,
+      "test_id": 3
+    }
+  ],
+  "extra": {
+    "step": 2048,
+    "best_score": -0.1556665832622333
+  }
+}

@@ -36,7 +36,7 @@ make train-stage2
 make eval-stage2
 ```
 
-The smoke run checks the training and checkpoint pipeline; it is not evidence that the learned policy has solved the task. Stage 1 trains on hold/follow scenarios, and stage 2 resumes from stage 1 with crossing and head-on disturbances. See [sofar.md](sofar.md) for the current research conclusions, setup summary and paper-to-implementation mapping.
+The smoke run checks the training and checkpoint pipeline; it is not evidence that the learned policy has solved the task. Stage 1 trains on hold/follow scenarios, and stage 2 resumes from stage 1 with crossing and head-on disturbances. Multi-seed repeats use `make train-stage1-multi` / `eval-stage1-multi` / `train-stage2-multi` / `eval-stage2-multi`. Extra eval targets: `eval-heldout` (seeds 100000+), `eval-noisy`, `eval-dense`. See [sofar.md](sofar.md) for the current research conclusions, setup summary and paper-to-implementation mapping.
 
 ## Run the interactive laboratory
 
@@ -64,11 +64,11 @@ The default viewer runs a **predictive classical baseline**. It is immediately u
 - PettingZoo parallel environment with Gymnasium spaces and simultaneous 3D velocity commands.
 - Fixed target-relative slot identity, finite controller response, acceleration/speed command limits, and collision checks over every integration segment.
 - Local masked neighbor/obstacle observations, configurable sensor range, position noise and observation dropout.
-- Eight scenarios: hold, follow, crossing, head-on, repeated crossings, static spheres, smooth target turns, and wind gusts.
+- Nine scenarios: hold, follow, crossing, head-on, repeated crossings, static spheres, a dense sphere cluster, smooth target turns, and wind gusts.
 - Live object injection, 3D browser visualization, individual slot markers, trails and telemetry.
 - A sampled predictive baseline, a no-avoidance ablation, and a shared neural policy with masked set encoders.
 - Behavior-cloning warm start, clipped independent PPO, checkpoint save/reload/resume, and seeded JSON evaluation.
-- Per-episode collision/failure, minimum surface clearance, slot and centroid RMSE, command smoothness, and per-event recovery measurements.
+- Per-episode collision/failure, minimum surface clearance, slot and centroid RMSE, command smoothness, and per-event recovery measurements. Evaluation reports include success rate and slot-RMSE confidence intervals; `python -m swarmflow compare a.json b.json` diffs two reports.
 
 This first environment models **stabilized translational flight**, not full rotor/attitude physics. Drone tilt in the viewer is illustrative. There is no downwash, motor model, camera perception, physical contact response or hardware flight validation. The plan specifies a later PyBullet validation stage.
 
@@ -76,7 +76,7 @@ This first environment models **stabilized translational flight**, not full roto
 
 The papers led to a scoped benchmark rather than a claim of a new flight-control method. The evidence supports shared local policies, permutation-invariant neighbor representations, PPO as a reasonable cooperative-learning baseline, predictive relative-motion reasoning, and explicit formation-recovery measurements. It does not support claiming formal safety, dense-obstacle generalization, physical-flight validity or a qualified learned policy from the current development runs.
 
-Accordingly, the project first learns velocity-level swarm movement above a stabilized flight model, keeps persistent target-relative slot identities, compares against a visible predictive controller, and measures collision, clearance, formation error and recovery separately. Full multirotor physics, centralized-critic comparisons, dense wall/corridor sensing and hardware validation remain future experiments. The complete paper-by-paper rationale and implementation status are documented in [sofar.md](sofar.md).
+Accordingly, the project first learns velocity-level swarm movement above a stabilized flight model, keeps persistent target-relative slot identities, compares against a visible predictive controller, and measures collision, clearance, formation error and recovery separately. Full multirotor physics and hardware validation remain future experiments. Dense sphere clusters and optional rangefinder hits are in the environment; full-height mesh walls are not. The complete paper-by-paper rationale and implementation status are documented in [sofar.md](sofar.md).
 
 ## Evaluate and test
 
@@ -114,7 +114,7 @@ For the first actual experiment, start with hold/follow, evaluate, then introduc
 .venv/bin/python -m swarmflow view --checkpoint runs/stage2-seed0/latest.pt
 ```
 
-Budgets above are starting experiments, not convergence promises. Do not advance a stage merely because it used its step budget. Repeat with at least three independent training seeds and compare success, recovery and clearance together. PPO's reported `steps` count environment advances; multiply by drone count for agent transitions. Behavior-cloning samples are counted separately in the log. This implementation is **parameter-sharing IPPO with a local critic**, not MAPPO. Resume restores network and optimizer, then starts a fresh seeded episode; it is not exact trajectory continuation.
+Budgets above are starting experiments, not convergence promises. Do not advance a stage merely because it used its step budget. Repeat with at least three independent training seeds and compare success, recovery and clearance together. PPO's reported `steps` count environment advances; multiply by drone count for agent transitions. Behavior-cloning samples are counted separately in the log. Default training is **parameter-sharing IPPO with a local critic**; use `--critic central` for a MAPPO-style value head and `--failure-reset` for pre-collision restores. Multi-seed stages: `make train-stage1-multi` / `train-stage2-multi`. Resume restores network and optimizer, then starts a fresh seeded episode; it is not exact trajectory continuation.
 
 ## Files
 

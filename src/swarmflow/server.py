@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 import numpy as np
 
 from .baseline import PredictiveController
+from .config import GEOMETRIES, WORLDS
 from .env import SwarmEnv
 from .scenarios import SCENARIOS
 
@@ -78,11 +79,36 @@ def make_server(config, port=8765, checkpoint=None):
                         scenario = data.get("scenario", env.scenario)
                         count = data.get("drones", env.config.drones)
                         seed = data.get("seed", state["seed"])
-                        if scenario not in SCENARIOS or not isinstance(seed, int) or not 0 <= seed <= 2**32 - 1:
-                            raise ValueError("Invalid scenario or seed")
-                        new_config = replace(env.config, drones=count)
+                        geometry = data.get("geometry", env.config.geometry)
+                        world = data.get("world", env.config.world)
+                        spacing = data.get("spacing", env.config.spacing)
+                        if scenario == "terrain_follow":
+                            world = "hills"
+                        continuous = bool(data.get("continuous", False))
+                        duration = data.get("duration", 3600.0 if continuous else (180.0 if scenario == "pilot" else 24.0))
+                        if scenario not in SCENARIOS:
+                            raise ValueError(f"Unknown scenario {scenario!r}")
+                        try:
+                            seed = int(seed)
+                            count = int(count)
+                            spacing = float(spacing)
+                        except (TypeError, ValueError) as error:
+                            raise ValueError("Seed, drones and spacing must be numeric") from error
+                        if isinstance(seed, bool) or not 0 <= seed <= 2**32 - 1:
+                            raise ValueError(f"Invalid seed {seed}")
+                        if geometry not in GEOMETRIES:
+                            raise ValueError(f"geometry must be one of {GEOMETRIES}")
+                        if world not in WORLDS:
+                            raise ValueError(f"world must be one of {WORLDS}")
+                        if not isinstance(duration, (int, float)) or isinstance(duration, bool) or not 1 <= float(duration) <= 7200:
+                            raise ValueError("duration must be between 1 and 7200 seconds")
+                        capacity = 16 if continuous or world in ("canyon", "pillars", "hills") else env.config.obstacles
+                        new_config = replace(env.config, drones=count, geometry=geometry, world=world,
+                                             spacing=spacing, duration=float(duration),
+                                             obstacles=max(env.config.obstacles, capacity))
                         new_env = SwarmEnv(new_config, scenario)
                         new_env.reset(seed=seed)
+                        new_env.continuous = continuous
                         state.update(env=new_env, seed=seed, controller=policy or PredictiveController(new_config))
                     elif self.path == "/api/step":
                         count = data.get("steps", 1)
@@ -94,6 +120,10 @@ def make_server(config, port=8765, checkpoint=None):
                     elif self.path == "/api/inject":
                         env.inject(float(data.get("speed", 1.6)), float(data.get("radius", 0.7)),
                                    float(data.get("angle", np.pi / 2)))
+                    elif self.path == "/api/steer":
+                        velocity = data.get("velocity")
+                        position = data.get("position")
+                        env.steer(velocity=velocity, position=position)
                     else:
                         self.respond({"error": "Not found"}, 404)
                         return

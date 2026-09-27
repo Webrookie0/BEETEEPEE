@@ -1,6 +1,9 @@
 from dataclasses import asdict, dataclass
 import math
 
+GEOMETRIES = ("grid", "circle", "square", "triangle")
+WORLDS = ("empty", "hills", "canyon", "pillars")
+
 
 @dataclass(frozen=True)
 class Config:
@@ -24,9 +27,19 @@ class Config:
     recovery_position: float = 0.35
     recovery_velocity: float = 0.35
     recovery_hold: float = 1.0
+    rays: int = 0
+    ray_range: float = 5.0
+    geometry: str = "grid"
+    world: str = "empty"
 
     def __post_init__(self):
+        if self.geometry not in GEOMETRIES:
+            raise ValueError(f"geometry must be one of {GEOMETRIES}")
+        if self.world not in WORLDS:
+            raise ValueError(f"world must be one of {WORLDS}")
         for key, value in asdict(self).items():
+            if isinstance(value, str):
+                continue
             if not math.isfinite(value):
                 raise ValueError(f"{key} must be finite")
         for key in ("drones", "substeps", "neighbors", "obstacles"):
@@ -35,9 +48,11 @@ class Config:
                 raise ValueError(f"{key} must be a positive integer")
         if not 2 <= self.drones <= 32:
             raise ValueError("drones must be between 2 and 32")
+        if not isinstance(self.rays, int) or isinstance(self.rays, bool) or self.rays < 0:
+            raise ValueError("rays must be a nonnegative integer")
         for key in ("dt", "duration", "radius", "spacing", "altitude", "stand_off",
                     "max_speed", "max_accel", "response_time", "sensor_range",
-                    "recovery_position", "recovery_velocity", "recovery_hold"):
+                    "recovery_position", "recovery_velocity", "recovery_hold", "ray_range"):
             if getattr(self, key) <= 0:
                 raise ValueError(f"{key} must be positive")
         if self.spacing <= 2 * self.radius + 0.2:

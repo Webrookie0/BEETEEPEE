@@ -1,0 +1,25 @@
+{
+  "mode": "baseline",
+  "policy": "baseline",
+  "ckpt": null,
+  "seed": 0,
+  "dumped": "20260919_065420",
+  "model_dump": {
+    "latest": "D:\\Presonal Project\\BTP1_v1\\models\\latest.pt",
+    "best": "D:\\Presonal Project\\BTP1_v1\\models\\best.pt"
+  },
+  "gates": [
+    {
+      "passed": false,
+      "reason": "short_episode",
+      "error": 15.976902477456608,
+      "dist_ok": false,
+      "speed_ok": false,
+      "tilt_ok": true,
+      "space_ok": true,
+      "cap": 15,
+      "test_id": 2
+    }
+  ],
+  "extra": {}
+}

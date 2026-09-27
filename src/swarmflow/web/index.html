@@ -15,11 +15,43 @@
       <aside>
         <div class="section-label"><span>01 / MISSION</span><span class="dot"></span></div>
         <label for="scenario">Flight scenario</label>
-        <select id="scenario"><option value="crossing">Crossing object</option><option value="follow">Target following</option><option value="hold">Stationary formation</option><option value="head_on">Head-on object</option><option value="double_crossing">Repeated crossings</option><option value="slalom">Static obstacles</option><option value="turn">Turning target</option><option value="gust">Wind disturbance</option></select>
+        <select id="scenario">
+          <option value="crossing">Crossing object</option>
+          <option value="follow">Target following</option>
+          <option value="hold">Stationary formation</option>
+          <option value="pilot">Pilot reference (you steer)</option>
+          <option value="terrain_follow">Terrain following</option>
+          <option value="head_on">Head-on object</option>
+          <option value="double_crossing">Repeated crossings</option>
+          <option value="slalom">Static obstacles</option>
+          <option value="dense">Dense spheres</option>
+          <option value="turn">Turning target</option>
+          <option value="gust">Wind disturbance</option>
+        </select>
+        <label for="geometry">Formation geometry</label>
+        <select id="geometry">
+          <option value="grid" selected>Grid</option>
+          <option value="circle">Circle</option>
+          <option value="square">Square</option>
+          <option value="triangle">Triangle</option>
+        </select>
+        <label for="compaction">Formation compaction</label>
+        <select id="compaction">
+          <option value="0.85">Tight</option>
+          <option value="1.1" selected>Normal</option>
+          <option value="1.45">Open</option>
+          <option value="1.9">Loose</option>
+        </select>
+        <label for="terrain">World / terrain</label>
+        <select id="terrain">
+          <option value="empty" selected>Empty flat</option>
+          <option value="hills">Rolling hills</option>
+          <option value="canyon">Canyon walls</option>
+          <option value="pillars">Pillar field</option>
+        </select>
         <div class="two"><div><label for="drones">Drones</label><select id="drones"><option>4</option><option selected>8</option><option>12</option><option>16</option><option>24</option><option>32</option></select></div><div><label for="seed">Scenario seed</label><input id="seed" type="number" value="7" min="0" max="4294967295"></div></div>
-        <div class="actions"><button id="play" class="primary" disabled>Start flight</button><button id="reset" class="secondary" disabled>Reset</button></div>
-        <button id="repeat" class="repeat" aria-pressed="false" disabled>Repeat flights: Off</button>
-        <p class="hint">Repeat starts flying and reruns the selected test automatically. Pause stops the loop. Run again restarts a completed test.</p>
+        <div class="actions"><button id="play" class="primary" disabled>Run</button><button id="reset" class="secondary" disabled>Reset</button></div>
+        <p class="hint">Run starts a continuous world: new terrain and crossing events keep appearing ahead. Stop pauses. Reset rebuilds the scene.</p>
         <div class="separator"></div>
         <div class="section-label"><span>02 / DISTURBANCE</span><span class="subtle">LIVE INPUT</span></div>
         <label for="speed">Object speed <output id="speed-value">1.6 m/s</output></label><input id="speed" type="range" min="0.3" max="5" value="1.6" step="0.1">
@@ -30,16 +62,34 @@
         <div class="separator"></div>
         <div class="section-label">03 / RECOVERY RULE</div>
         <p class="rule">All drones within <b>0.35 m</b> of their own slots, with velocity error below <b>0.35 m/s</b>, for <b>1 second</b> after the object exits.</p>
+        <div id="pilot-panel" hidden>
+          <div class="separator"></div>
+          <div class="section-label"><span>04 / PILOT REFERENCE</span><span class="subtle">WASD · QE</span></div>
+          <p class="hint">Start flight, then steer the gold reference. Drones keep their formation slots relative to it. Keys: <b>W/S</b> forward/back, <b>A/D</b> left/right, <b>Q/E</b> up/down. Or use the pads.</p>
+          <div class="two">
+            <button id="nudge-forward" type="button" class="text-button">↑ Forward</button>
+            <button id="nudge-back" type="button" class="text-button">↓ Back</button>
+          </div>
+          <div class="two">
+            <button id="nudge-left" type="button" class="text-button">← Left</button>
+            <button id="nudge-right" type="button" class="text-button">→ Right</button>
+          </div>
+          <div class="two">
+            <button id="nudge-up" type="button" class="text-button">↥ Up</button>
+            <button id="nudge-down" type="button" class="text-button">↧ Down</button>
+          </div>
+          <button id="nudge-stop" type="button" class="text-button">Stop reference</button>
+        </div>
       </aside>
       <div class="flight-panel">
-        <div class="flight-toolbar"><div><span class="live-dot"></span><span id="phase">READY TO FLY</span></div><div class="view-buttons"><button id="orbit" class="selected">Orbit</button><button id="top">Top</button><button id="export">Save PNG</button></div></div>
-        <div class="viewport"><canvas id="world" aria-label="Interactive 3D swarm simulation: drag to orbit, scroll to zoom"></canvas><div class="viewport-title"><strong id="mission-title">Crossing object</strong><span id="simulation-time">T + 00.00 s</span></div><div class="scale">METERS · DRAG TO ORBIT · SCROLL TO ZOOM</div><div class="legend"><span><i class="drone-key"></i> Drone</span><span><i class="target-key"></i> Target</span><span><i class="slot-key"></i> Assigned slot</span><span><i class="object-key"></i> Object</span></div></div>
+        <div class="flight-toolbar"><div><span class="live-dot"></span><span id="phase">READY TO FLY</span></div><div class="view-buttons"><button id="orbit" class="selected">Orbit</button><button id="axis">Axis</button><button id="export">Save PNG</button></div></div>
+        <div class="viewport"><canvas id="world" aria-label="Interactive 3D swarm simulation: drag to orbit, scroll to zoom"></canvas><div class="viewport-title"><strong id="mission-title">Crossing object</strong><span id="simulation-time">T + 00.00 s</span></div><div class="scale" id="view-hint">METERS · DRAG TO ORBIT · SCROLL TO ZOOM</div><div class="legend"><span><i class="drone-key"></i> Drone</span><span><i class="target-key"></i> Target</span><span><i class="slot-key"></i> Assigned slot</span><span><i class="object-key"></i> Object</span></div></div>
         <div class="metrics"><div><span>LIVE SLOT ERROR</span><strong id="slot-error">—</strong><small>root mean square · m</small></div><div><span>MINIMUM CLEARANCE</span><strong id="clearance">—</strong><small>surface to surface · m</small></div><div><span>RECOVERED EVENTS</span><strong id="recovered">0 / 0</strong><small>completed / encountered</small></div><div><span>FLIGHT STATE</span><strong id="flight-state" class="word">Ready</strong><small id="state-note">Seed 7 · 8 agents</small></div></div>
         <div class="timeline"><div><span>SLOT ERROR / m</span><small>Last 12 simulated seconds</small></div><canvas id="chart" aria-label="Live root mean square slot error in meters over simulation time in seconds"></canvas></div>
       </div>
     </section>
     <footer><span>One target. Persistent slots. Local observations.</span><span id="model-note">Reduced-order dynamics · illustrative drone attitude · baseline control</span></footer>
   </main>
-  <script src="/app.js"></script>
+  <script src="/app.js?v=axis2"></script>
 </body>
 </html>

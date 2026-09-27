@@ -7,7 +7,8 @@ from swarmflow import Config, SwarmEnv
 from swarmflow.baseline import PredictiveController, SlotController
 from swarmflow.evaluate import run_episode
 from swarmflow.geometry import swept_distance
-from swarmflow.scenarios import Obstacle
+from swarmflow.config import GEOMETRIES
+from swarmflow.scenarios import Obstacle, formation, ground_height
 
 
 def test_parallel_api():
@@ -115,7 +116,48 @@ def test_predictive_controller_recovers_but_blind_controller_collides():
 
 
 @pytest.mark.parametrize("change", [{"drones": 1}, {"spacing": .1}, {"dt": float("nan")},
-                                   {"dropout": 1}, {"substeps": 1.5}, {"max_speed": 0}])
+                                   {"dropout": 1}, {"substeps": 1.5}, {"max_speed": 0},
+                                   {"geometry": "hexagon"}])
 def test_invalid_config(change):
     with pytest.raises(ValueError):
         replace(Config(), **change)
+
+
+@pytest.mark.parametrize("geometry", GEOMETRIES)
+def test_formation_geometries_centered(geometry):
+    offsets = formation(8, 1.25, geometry)
+    assert offsets.shape == (8, 3)
+    np.testing.assert_allclose(offsets.mean(axis=0), 0, atol=1e-6)
+    assert np.max(np.abs(offsets[:, 2])) < 1e-9
+    delta = offsets[:, None, :2] - offsets[None, :, :2]
+    distances = np.linalg.norm(delta, axis=-1)
+    np.fill_diagonal(distances, np.inf)
+    assert float(np.min(distances)) >= 1.25 - 1e-6
+
+
+def test_pilot_reference_steering():
+    env = SwarmEnv(Config(drones=4, duration=5, geometry="circle"), "pilot")
+    env.reset(seed=4)
+    start = env.target()[0].copy()
+    assert env.config.geometry == "circle"
+    env.steer(velocity=[1.5, 0, 0])
+    for _ in range(20):
+        env.step({agent: np.zeros(3) for agent in env.agents})
+    assert env.target()[0][0] > start[0] + 0.5
+    with pytest.raises(ValueError):
+        SwarmEnv(Config(drones=4), "hold").steer(velocity=[1, 0, 0])
+
+
+def test_hills_auto_climb_and_hard_contact_still_ends():
+    config = Config(drones=4, duration=6, world="hills", geometry="circle")
+    env = SwarmEnv(config, "follow")
+    env.reset(seed=11)
+    assert len(env.peaks) >= 6
+    px, py, amplitude, _ = max(env.peaks, key=lambda p: p[2])
+    assert float(ground_height(px, py, "hills", env.peaks)) >= amplitude * 0.9
+    slots = env.slots()
+    assert np.all(slots[:, 2] >= config.radius + 0.5)
+    env.positions[0] = np.array([px, py, config.radius + 0.05])
+    env.step({agent: np.zeros(3) for agent in env.agents})
+    assert env.failure == "terrain"
+    assert not env.agents

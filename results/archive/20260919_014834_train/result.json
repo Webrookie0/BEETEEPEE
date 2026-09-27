@@ -1,0 +1,25 @@
+{
+  "mode": "train",
+  "policy": "rl",
+  "ckpt": "D:\\Presonal Project\\BTP1_v1\\models\\latest.pt",
+  "seed": 0,
+  "dumped": "20260919_014834",
+  "model_dump": {
+    "latest": "D:\\Presonal Project\\BTP1_v1\\models\\latest.pt",
+    "best": "D:\\Presonal Project\\BTP1_v1\\models\\best.pt"
+  },
+  "gates": [
+    {
+      "passed": false,
+      "reason": "short_episode",
+      "error": 91.6490209277248,
+      "dist_ok": false,
+      "speed_ok": false,
+      "tilt_ok": false,
+      "space_ok": true,
+      "cap": 15,
+      "test_id": 2
+    }
+  ],
+  "extra": {}
+}

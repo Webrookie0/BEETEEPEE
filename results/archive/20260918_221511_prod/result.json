@@ -1,0 +1,25 @@
+{
+  "mode": "prod",
+  "policy": "rl",
+  "ckpt": "D:\\Presonal Project\\BTP1_v1\\models\\best.pt",
+  "seed": 0,
+  "dumped": "20260918_221511",
+  "model_dump": {
+    "latest": "D:\\Presonal Project\\BTP1_v1\\models\\latest.pt",
+    "best": "D:\\Presonal Project\\BTP1_v1\\models\\best.pt"
+  },
+  "gates": [
+    {
+      "passed": false,
+      "reason": "short_episode",
+      "error": 0.48338802436245265,
+      "dist_ok": false,
+      "speed_ok": true,
+      "tilt_ok": true,
+      "space_ok": true,
+      "cap": 0.4,
+      "test_id": 1
+    }
+  ],
+  "extra": {}
+}

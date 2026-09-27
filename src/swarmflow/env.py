@@ -1,11 +1,13 @@
 from functools import lru_cache
+import copy
 import numpy as np
 from gymnasium import spaces
 from pettingzoo import ParallelEnv
 
 from .config import Config
 from .geometry import limit_norm, swept_distance
-from .scenarios import SCENARIOS, crossing, formation, make_obstacles, target_state
+from .scenarios import (SCENARIOS, Obstacle, crossing, formation, ground_height, make_canyon_segment,
+                        make_obstacles, make_peaks, make_terrain, target_state)
 
 
 class SwarmEnv(ParallelEnv):
@@ -19,7 +21,14 @@ class SwarmEnv(ParallelEnv):
         self.render_mode = render_mode
         self.possible_agents = [f"drone_{i}" for i in range(self.config.drones)]
         self.agents = []
-        self.offsets = formation(self.config.drones, self.config.spacing)
+        self.offsets = formation(self.config.drones, self.config.spacing, self.config.geometry)
+        self.guide_position = np.array([2., 0., self.config.altitude])
+        self.guide_velocity = np.zeros(3)
+        self.peaks = []
+        self.continuous = False
+        self._last_stream = 0.0
+        self._canyon_built_to = 22.0
+        self._peaks_built_to = 22.0
         self.rng = np.random.default_rng()
 
     @lru_cache(maxsize=None)
@@ -33,12 +42,36 @@ class SwarmEnv(ParallelEnv):
     def action_space(self, agent):
         return spaces.Box(-1., 1., (3,), np.float32)
 
+    def _terrain_world(self):
+        return "hills" if self.scenario == "terrain_follow" else self.config.world
+
+    def _min_fly_z(self, x, y):
+        floor = ground_height(np.asarray(x), np.asarray(y), self._terrain_world(), getattr(self, "peaks", ()))
+        return float(np.asarray(floor).reshape(-1)[0] + self.config.radius + 0.22)
+
     def target(self, time=None):
+        """Reference stays on its path; it does not climb over hills."""
+        if self.scenario == "pilot":
+            return self.guide_position.copy(), self.guide_velocity.copy()
         return target_state(self.time if time is None else time, self.scenario, self.config)
 
     def slots(self, time=None):
-        target, _ = self.target(time)
-        return target - np.array([self.config.stand_off, 0., 0.]) + self.offsets
+        """Drones climb only as needed to clear local ground under their slots."""
+        target, velocity = self.target(time)
+        slots = target - np.array([self.config.stand_off, 0., 0.]) + self.offsets
+        if self._terrain_world() == "hills":
+            # Short look-ahead: climb late and stay close to the ridge, not high early.
+            speed = float(np.linalg.norm(velocity[:2]))
+            if speed >= 0.3:
+                vx, vy = float(velocity[0]), float(velocity[1])
+            else:
+                vx, vy = float(max(self.config.target_speed, 1.2)), 0.0
+            look = (0.0, 1.0, 2.0, 3.2)
+            for i in range(len(slots)):
+                need = max(self._min_fly_z(slots[i, 0] + t * vx,
+                                           slots[i, 1] + t * vy) for t in look)
+                slots[i, 2] = max(slots[i, 2], need)
+        return slots
 
     def reset(self, seed=None, options=None):
         if seed is not None:
@@ -47,11 +80,19 @@ class SwarmEnv(ParallelEnv):
         self.agents = self.possible_agents[:]
         self.time = 0.0
         self.steps = 0
+        self.guide_position = np.array([2., 0., self.config.altitude])
+        self.guide_velocity = np.zeros(3)
+        world = "hills" if self.scenario == "terrain_follow" else self.config.world
+        self.peaks = make_peaks(world, self.config, self.rng, 2.0, 22.0)
+        self._peaks_built_to = 22.0
         self.positions = self.slots() + self.rng.uniform(-0.07, 0.07, (self.config.drones, 3))
         self.velocities = np.tile(self.target()[1], (self.config.drones, 1))
         self.commands = self.velocities.copy()
         self.accelerations = np.zeros_like(self.positions)
         self.obstacle_list = make_obstacles(self.scenario, self.config, self.rng)
+        self.obstacle_list.extend(make_terrain(world, self.config, self.rng, self.peaks))
+        self._last_stream = 0.0
+        self._canyon_built_to = 22.0
         self.events = {}
         self.collision = False
         self.failure = None
@@ -63,6 +104,43 @@ class SwarmEnv(ParallelEnv):
         self.last_observations = self._observe()
         return self.last_observations, {a: {} for a in self.agents}
 
+    def _maybe_stream_world(self):
+        if not self.continuous or self.failure or not self.agents:
+            return
+        if self.time - self._last_stream < 3.0:
+            return
+        self._last_stream = self.time
+        # Drop finished movers so the list does not grow forever.
+        self.obstacle_list = [o for o in self.obstacle_list
+                              if o.end > self.time - 0.5 or not o.recovery]
+        target, _ = self.target()
+        # Only traffic scenarios auto-spawn movers; follow/hold/etc. stay empty unless Inject is used.
+        if self.scenario in ("crossing", "double_crossing", "head_on"):
+            angle = float(self.rng.choice([np.pi / 2, -np.pi / 2, np.pi]))
+            try:
+                self.inject(speed=float(self.rng.uniform(1.3, 1.9)),
+                            radius=float(self.rng.uniform(0.55, 0.85)), angle=angle)
+            except ValueError:
+                pass
+        if self._terrain_world() == "canyon" and target[0] + 12.0 > self._canyon_built_to:
+            x0, x1 = self._canyon_built_to, self._canyon_built_to + 12.0
+            self.obstacle_list.extend(make_canyon_segment(x0, x1, self.config, count=12,
+                                                          tag=f"{self._canyon_built_to:.0f}"))
+            self._canyon_built_to = x1
+        if self._terrain_world() == "hills" and target[0] + 14.0 > self._peaks_built_to:
+            x0, x1 = self._peaks_built_to, self._peaks_built_to + 14.0
+            self.peaks.extend(make_peaks("hills", self.config, self.rng, x0, x1))
+            # Keep nearby peaks only so the mesh stays bounded.
+            self.peaks = [p for p in self.peaks if p[0] > target[0] - 18.0]
+            self._peaks_built_to = x1
+        traffic = sum(1 for o in self.active_obstacles() if o.recovery)
+        if self._terrain_world() == "pillars" and traffic < self.config.obstacles:
+            self.obstacle_list.append(Obstacle(
+                f"pillar-stream-{self.steps}",
+                np.array([float(target[0] + self.rng.uniform(6, 10)),
+                          float(self.rng.uniform(-2.5, 2.5)), self.config.altitude]),
+                np.zeros(3), float(self.rng.uniform(0.35, 0.55))))
+
     def active_obstacles(self, time=None):
         t = self.time if time is None else time
         return [o for o in self.obstacle_list if o.start <= t < o.end]
@@ -72,13 +150,34 @@ class SwarmEnv(ParallelEnv):
             raise ValueError("Reset the environment before injecting an object")
         if not np.isfinite([speed, radius, angle]).all() or not 0.3 <= speed <= 5 or not 0.2 <= radius <= 1.5:
             raise ValueError("Object speed must be 0.3–5 m/s and radius 0.2–1.5 m")
-        if len(self.active_obstacles()) >= self.config.obstacles:
+        traffic = [o for o in self.active_obstacles() if o.recovery]
+        if len(traffic) >= self.config.obstacles:
             raise ValueError("Maximum simultaneous objects reached")
         obj = crossing(self.config, self.time, f"injected-{len(self.obstacle_list)}", speed,
-                       radius, angle, self.scenario)
+                       radius, angle, self.scenario, target=self.target())
         self.obstacle_list.append(obj)
         self.last_observations = self._observe()
         return obj.name
+
+    def steer(self, velocity=None, position=None):
+        if self.scenario != "pilot":
+            raise ValueError("Reference steering is only available in the pilot scenario")
+        if not self.agents:
+            raise ValueError("Reset the environment before steering the reference")
+        if position is None and velocity is None:
+            raise ValueError("Provide velocity and/or position")
+        if position is not None:
+            point = np.asarray(position, dtype=float).reshape(3)
+            if not np.isfinite(point).all():
+                raise ValueError("position must be finite")
+            self.guide_position = point
+            self.guide_velocity = np.zeros(3)
+        if velocity is not None:
+            command = np.asarray(velocity, dtype=float).reshape(3)
+            if not np.isfinite(command).all():
+                raise ValueError("velocity must be finite")
+            self.guide_velocity = limit_norm(command, self.config.max_speed)
+        self.last_observations = self._observe()
 
     def _object_rows(self, positions, velocities, radii, own, count):
         rows = np.zeros((count, 8), dtype=np.float32)
@@ -96,6 +195,41 @@ class SwarmEnv(ParallelEnv):
             rows[k, 6:] = [radii[j], 1.]
         return rows
 
+    def _ray_hit(self, origin, direction, positions, radii):
+        if len(positions) == 0:
+            return None
+        offset = origin - positions
+        b = 2.0 * offset @ direction
+        c = np.einsum("ij,ij->i", offset, offset) - radii ** 2
+        disc = b * b - 4.0 * c
+        root = np.sqrt(np.maximum(disc, 0.0))
+        entry = (-b - root) / 2.0
+        exit_t = (-b + root) / 2.0
+        hit = np.where(entry > 1e-6, entry, exit_t)
+        hit = np.where((disc >= 0) & (hit > 1e-6) & (hit <= self.config.ray_range), hit, np.inf)
+        best = float(np.min(hit))
+        return None if not np.isfinite(best) else best
+
+    def _fill_ray_rows(self, rows, own, positions, radii):
+        empty = np.flatnonzero(rows[:, -1] <= 0.5)
+        if len(empty) == 0 or self.config.rays <= 0:
+            return rows
+        origin = self.positions[own]
+        hits = []
+        for k in range(self.config.rays):
+            angle = 2.0 * np.pi * k / self.config.rays
+            direction = np.array([np.cos(angle), np.sin(angle), 0.0])
+            distance = self._ray_hit(origin, direction, positions, radii)
+            if distance is not None:
+                hits.append((distance, direction * distance))
+        hits.sort(key=lambda item: item[0])
+        for slot, (_, relative) in zip(empty, hits):
+            rows[slot, :3] = relative
+            rows[slot, 3:6] = 0.0
+            rows[slot, 6] = 0.05
+            rows[slot, 7] = 1.0
+        return rows
+
     def _observe(self):
         result = {}
         active = self.active_obstacles()
@@ -108,10 +242,13 @@ class SwarmEnv(ParallelEnv):
             own = np.concatenate((slots[i] - self.positions[i], self.velocities[i], self.target()[1],
                                   self.commands[i], self.offsets[i], [self.positions[i, 2],
                                   max(0., 1 - self.time / self.config.duration)]))
+            obstacles = self._object_rows(positions, velocities, radii, i, self.config.obstacles)
+            if self.config.rays > 0:
+                obstacles = self._fill_ray_rows(obstacles, i, positions, radii)
             result[agent] = {"self": own.astype(np.float32),
                 "neighbors": self._object_rows(self.positions[others], self.velocities[others],
                     np.full(np.sum(others), self.config.radius), i, self.config.neighbors),
-                "obstacles": self._object_rows(positions, velocities, radii, i, self.config.obstacles)}
+                "obstacles": obstacles}
         return result
 
     def _clearance(self, before, after, start, end):
@@ -165,6 +302,18 @@ class SwarmEnv(ParallelEnv):
         h = c.dt / c.substeps
         for sub in range(c.substeps):
             t0 = self.time + sub * h
+            if self.scenario == "pilot":
+                self.guide_position = self.guide_position + self.guide_velocity * h
+                self.guide_position[0] = float(np.clip(self.guide_position[0], -55, 55))
+                self.guide_position[1] = float(np.clip(self.guide_position[1], -55, 55))
+                low = c.radius + 0.5
+                if self._terrain_world() == "hills":
+                    gx, gy = self.guide_position[0], self.guide_position[1]
+                    vx, vy = self.guide_velocity[0], self.guide_velocity[1]
+                    low = max(self._min_fly_z(gx + t * vx, gy + t * vy) for t in (0.0, 1.0, 2.0, 3.2))
+                    if self.guide_position[2] <= low + 0.2 and self.guide_velocity[2] < 0:
+                        self.guide_velocity[2] = 0.0
+                self.guide_position[2] = float(np.clip(self.guide_position[2], low, 10 - c.radius))
             before = self.positions.copy()
             self.accelerations = limit_norm((self.commands - self.velocities) / c.response_time, c.max_accel)
             wind = np.array([0., 1.2, 0.2]) if self.scenario == "gust" and 7 <= t0 < 9 else 0.
@@ -175,7 +324,12 @@ class SwarmEnv(ParallelEnv):
             if clearance <= 0:
                 self.collision = True
                 self.failure = "collision"
-            if (np.any(self.positions[:, 2] <= c.radius) or np.any(self.positions[:, 2] >= 10 - c.radius)
+            world = "hills" if self.scenario == "terrain_follow" else c.world
+            floor = c.radius + ground_height(self.positions[:, 0], self.positions[:, 1], world, self.peaks)
+            if np.any(self.positions[:, 2] <= floor):
+                self.collision = True
+                self.failure = self.failure or "terrain"
+            elif (np.any(self.positions[:, 2] >= 10 - c.radius)
                     or np.any(np.abs(self.positions[:, :2]) >= 60 - c.radius)):
                 self.failure = self.failure or "world_boundary"
         self.steps += 1
@@ -198,9 +352,13 @@ class SwarmEnv(ParallelEnv):
             reward -= 200.
         self.returns += reward
         self._update_recovery()
-        self.last_observations = self._observe()
+        if self.continuous and not self.failure:
+            self._maybe_stream_world()
+            self.last_observations = self._observe()
+        else:
+            self.last_observations = self._observe()
         terminated = bool(self.failure)
-        truncated = not terminated and self.time >= c.duration - 1e-9
+        truncated = (not self.continuous) and (not terminated) and self.time >= c.duration - 1e-9
         agents = self.agents[:]
         infos = {a: {"slot_error_m": float(errors[i]), "failure": self.failure} for i, a in enumerate(agents)}
         if terminated or truncated:
@@ -226,10 +384,37 @@ class SwarmEnv(ParallelEnv):
         return {"time": self.time, "scenario": self.scenario, "running": bool(self.agents),
                 "positions": self.positions.tolist(), "velocities": self.velocities.tolist(),
                 "accelerations": self.accelerations.tolist(), "slots": self.slots().tolist(),
-                "target": self.target()[0].tolist(), "radius": self.config.radius,
+                "target": self.target()[0].tolist(), "target_velocity": self.target()[1].tolist(),
+                "geometry": self.config.geometry,
+                "world": "hills" if self.scenario == "terrain_follow" else self.config.world,
+                "radius": self.config.radius,
+                "peaks": [{"x": p[0], "y": p[1], "height": p[2], "width": p[3]} for p in self.peaks],
                 "obstacles": [{"position": o.position(self.time).tolist(), "radius": o.radius,
                                "velocity": o.velocity.tolist(), "name": o.name} for o in self.active_obstacles()],
                 "metrics": self.summary()}
+
+    def capture_state(self):
+        state = {key: getattr(self, key) for key in
+                 ("time", "steps", "collision", "failure", "min_clearance",
+                  "error_integral", "centroid_integral", "smoothness_integral", "seed_value")}
+        for key in ("positions", "velocities", "commands", "accelerations", "returns",
+                    "guide_position", "guide_velocity"):
+            state[key] = getattr(self, key).copy()
+        for key in ("obstacle_list", "events", "last_observations", "peaks"):
+            state[key] = copy.deepcopy(getattr(self, key))
+        state["agents"] = self.agents[:]
+        return state
+
+    def restore_state(self, state):
+        for key in ("time", "steps", "collision", "failure", "min_clearance",
+                    "error_integral", "centroid_integral", "smoothness_integral", "seed_value"):
+            setattr(self, key, state[key])
+        for key in ("positions", "velocities", "commands", "accelerations", "returns",
+                    "guide_position", "guide_velocity"):
+            setattr(self, key, np.array(state[key], copy=True))
+        for key in ("obstacle_list", "events", "last_observations", "peaks"):
+            setattr(self, key, copy.deepcopy(state[key]))
+        self.agents = list(state["agents"])
 
     def close(self):
         pass

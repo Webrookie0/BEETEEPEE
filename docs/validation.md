@@ -50,3 +50,7 @@ Verified in Chrome against the local Python server:
 - No warning/error entries in the browser's captured console during the tested flight flow.
 
 Only the desktop layout has been visually checked. A mobile stylesheet exists but has not been independently validated. The viewer is an orthographic canvas projection of 3D state; its displayed drone attitude is illustrative.
+
+## Pipeline additions
+
+Makefile targets now include `train-stage1-multi` / `eval-stage1-multi` / `train-stage2-multi` / `eval-stage2-multi` (`SEEDS` default `0 1 2`, outputs `runs/stage1-seed$(S)`), `eval-heldout` (seed start 100000, `SEEDS_N` default 20), `eval-noisy` (`--noise 0.05 --dropout 0.1`), and `eval-dense` (`dense` and `slalom`, 12 obstacle slots). Evaluation JSON summaries add success rate and slot-RMSE confidence intervals; `swarmflow compare` diffs two reports. These targets and fields were not used for the historical numbers above.
