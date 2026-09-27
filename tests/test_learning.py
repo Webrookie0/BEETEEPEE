@@ -3,6 +3,7 @@ import numpy as np
 import torch
 
 from swarmflow import Config, SwarmEnv
+from swarmflow.env import FAILURE_PENALTY
 from swarmflow.policy import ActorCritic, LearnedController, SetEncoder, stack_observations, tensors
 from swarmflow.train import advantages, train
 
@@ -60,8 +61,60 @@ def test_training_checkpoint_reload_and_resume(tmp_path):
     assert rows[0]["type"] == "behavior_cloning"
     assert all(np.isfinite(row["value_loss"]) for row in rows if row["type"] == "ppo")
     assert all(row["failure_resets_this_run"] == 0 for row in rows if row["type"] == "ppo")
-    assert resumed.metadata["format"] == "swarmflow-v2"
+    assert resumed.metadata["format"] == "swarmflow-v3"
     assert resumed.metadata["central_critic"] is False
+    assert resumed.metadata["separate_critic"] is True
+
+
+def test_training_keeps_best_checkpoint_and_validation_log(tmp_path):
+    config = Config(drones=4, duration=.2)
+    train(config, ["hold"], total_steps=16, horizon=8, epochs=1, output=tmp_path, clone_steps=4, clone_epochs=1,
+          dagger_rounds=1, eval_seeds=2, envs=2)
+    evaluations = [json.loads(row) for row in (tmp_path / "evaluations.jsonl").read_text().splitlines()]
+    assert [row["reason"] for row in evaluations] == ["start", "final"]
+    best = json.loads((tmp_path / "best.json").read_text())
+    assert best["score"] == max(row["score"] for row in evaluations)
+    assert best["seeds"] == [5000, 5001]
+    selected = LearnedController(tmp_path / "best.pt")
+    assert selected.metadata["selection"]["score"] == best["score"]
+    assert json.loads((tmp_path / "finished.json").read_text())["environment_steps"] == 16
+    rows = [json.loads(row) for row in (tmp_path / "training.jsonl").read_text().splitlines()]
+    assert [row["driver"] for row in rows if row["type"] == "behavior_cloning"] == [
+        "teacher with action noise", "student (DAgger)"]
+
+
+def test_continue_finishes_the_original_budget(tmp_path):
+    config = Config(drones=4, duration=.2)
+    latest = train(config, ["hold"], total_steps=8, horizon=8, epochs=1, output=tmp_path, envs=1)
+    data = torch.load(latest, weights_only=True)
+    data["training"]["target_environment_steps"] = 24
+    torch.save(data, latest)
+    train(config, ["follow"], total_steps=1, output=tmp_path, continue_run=True)
+    resumed = LearnedController(latest)
+    assert resumed.metadata["environment_steps"] == 24
+    assert resumed.metadata["training"]["scenarios"] == ["hold"]
+
+
+def test_separate_critic_does_not_touch_actor_weights():
+    env = SwarmEnv(Config(drones=4, duration=.2), "hold")
+    observations, _ = env.reset(seed=2)
+    model = ActorCritic(separate_critic=True)
+    model.value(tensors(stack_observations(observations))).sum().backward()
+    assert all(p.grad is None for p in model.actor_parameters())
+    assert any(p.grad is not None for p in model.critic_parameters())
+    ids = {id(p) for p in model.actor_parameters()}
+    assert not ids & {id(p) for p in model.critic_parameters()}
+
+
+def test_reward_is_bounded_and_failure_is_always_worse():
+    env = SwarmEnv(Config(drones=4), "hold")
+    env.reset(seed=3)
+    env.positions = env.slots() + np.array([30., 0, 0])
+    _, reward, *_ = env.step({a: np.zeros(3) for a in env.agents})
+    worst_alive = min(reward.values())
+    assert worst_alive > -0.05 * 15
+    discounted_alive = worst_alive / (1 - 0.99)
+    assert discounted_alive > -FAILURE_PENALTY
 
 
 def test_attention_encoder_permutation_invariance():

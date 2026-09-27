@@ -5,6 +5,7 @@ let state = null, playing = false, busy = false, resetting = false, lastStep = 0
 let azimuth = -0.62, elevation = 0.83, zoom = 1, dragging = null, viewMode = 'orbit', panel = null;
 let center = [0, 0, 1.4], trails = [], history = [], lastTime = -1;
 let queue = Promise.resolve();
+let activeTest = null, testCatalog = [], testDefaults = {};
 const held = new Set();
 const colors = {drone:'#83ddc7', target:'#e6be7c', obstacle:'#dc918b', grid:'#20323e', muted:'#65818e'};
 const keyAxis = {w:[1,0,0],s:[-1,0,0],a:[0,1,0],d:[0,-1,0],q:[0,0,1],e:[0,0,-1],
@@ -40,7 +41,8 @@ function accept(s) {
   }
   $('connection').textContent='Local simulation connected';
   $('policy').textContent=s.policy;
-  $('learning-note').hidden=s.policy!=='learned checkpoint';
+  $('learning-note').hidden=s.mode!=='learned';
+  syncController(s);
   $('model-note').textContent=`Reduced-order dynamics · illustrative drone attitude · ${s.policy}`;
   $('simulation-time').textContent=`T + ${s.time.toFixed(2).padStart(5,'0')} s`;
   $('slot-error').textContent=liveError(s).toFixed(3);
@@ -49,6 +51,9 @@ function accept(s) {
   $('recovered').textContent=`${recovered} / ${events.length}`;
   $('state-note').textContent=`Seed ${s.seed} · ${s.positions.length} agents`;
   $('mission-title').textContent=$('scenario').querySelector(`option[value="${s.scenario}"]`).textContent;
+  $('test-badge').hidden=!activeTest;
+  if(activeTest)$('test-badge').textContent=`TEST ${activeTest.number} · SEED ${s.seed} · ${s.policy.toUpperCase()}`;
+  document.querySelectorAll('.test-card').forEach(card=>card.classList.toggle('active',!!activeTest&&card.dataset.number===String(activeTest.number)));
   const status=s.metrics.failure ? 'Failed' : !s.running ? 'Stopped' : !playing ? 'Paused' : s.obstacles.length ? 'Avoiding' : liveError(s)>.2 ? 'Recovering' : 'Following';
   $('flight-state').textContent=status;
   $('flight-state').style.color=s.metrics.failure ? colors.obstacle : colors.drone;
@@ -62,6 +67,23 @@ function accept(s) {
   $('pilot-panel').hidden=!pilot;
   for (const id of ['nudge-forward','nudge-back','nudge-left','nudge-right','nudge-up','nudge-down','nudge-stop'])
     $(id).disabled=resetting||!pilot||!s.running;
+}
+
+const controllerHints={
+  learned:'Neural network trained here with behavior cloning + PPO. Nothing else runs behind it.',
+  baseline:'Hand-coded sampled predictive controller: the reference the network is compared with.',
+  slot:'Ablation that flies to its slot and ignores obstacles, showing the obstacles are a real threat.'
+};
+let shownMode=null,shownCheckpoint=null;
+function syncController(s){
+  const select=$('controller'),learned=select.querySelector('option[value="learned"]');
+  learned.disabled=!s.learned_available;
+  learned.textContent=s.learned_available?'Learned policy (trained model)':'Learned policy (no trained model yet)';
+  if(s.mode!==shownMode){select.value=s.mode||'baseline';shownMode=s.mode;}
+  select.disabled=resetting;
+  $('controller-hint').textContent=controllerHints[s.mode]||'';
+  $('learning-checkpoint').textContent=s.checkpoint||'';
+  if(s.checkpoint!==shownCheckpoint){shownCheckpoint=s.checkpoint;if(modelReport)loadModel();}
 }
 
 function steerVelocity() {
@@ -84,6 +106,7 @@ async function steer(payload) {
 async function reset(start=false, continuous=false) {
   if(resetting)return;
   resetting=true;
+  activeTest=null;
   playing=false;
   const scenario=$('scenario').value;
   const geometry=$('geometry').value;
@@ -91,11 +114,12 @@ async function reset(start=false, continuous=false) {
   const spacing=Number($('compaction').value);
   const drones=parseInt($('drones').value,10);
   const seed=parseInt($('seed').value,10)||0;
+  const controller=$('controller').value;
   if(state)accept(state);
   try {
     notify('');
     const s=await api('/api/reset',{
-      scenario, drones, seed, geometry, world, spacing,
+      scenario, drones, seed, geometry, world, spacing, controller,
       continuous: !!continuous || !!start,
       duration: (continuous || start) ? 3600 : 24
     });
@@ -111,14 +135,16 @@ async function reset(start=false, continuous=false) {
     }
     playing=start;
     accept(s);
-  } catch(e) {notify(e.message);}
+  } catch(e) {notify(e.message);if(state)$('controller').value=state.mode;}
   finally {resetting=false;if(state)accept(state);}
 }
 $('reset').onclick=()=>reset(false, false);
+$('controller').onchange=()=>reset(playing, playing);
 $('geometry').onchange=()=>reset(playing, playing);
 $('compaction').onchange=()=>reset(playing, playing);
 $('terrain').onchange=()=>reset(playing, playing);
 $('scenario').onchange=()=>{
+  scenarioHint();
   if($('scenario').value==='terrain_follow')$('terrain').value='hills';
   reset(playing, playing);
 };
@@ -314,9 +340,235 @@ async function tick(t){
   }
   requestAnimationFrame(tick);
 }
+function scenarioLabel(value){
+  const option=$('scenario').querySelector(`option[value="${value}"]`);
+  return option?option.textContent:value;
+}
+function el(tag, className, text){
+  const node=document.createElement(tag);
+  if(className)node.className=className;
+  if(text!==undefined)node.textContent=text;
+  return node;
+}
+function scenarioHint(){
+  const hint=$('scenario-tests'), scenario=$('scenario').value;
+  hint.replaceChildren();
+  const users=testCatalog.filter(t=>t.scenarios.includes(scenario));
+  if(!users.length){hint.textContent=testCatalog.length?'Not part of a numbered test (free exploration).':'';return;}
+  hint.append('Used in tests ');
+  users.forEach(t=>{const a=el('a','',String(t.number));a.href=`#test-${t.number}`;a.title=t.title;hint.append(a);});
+}
+async function watch(test, scenario){
+  if(resetting||!test.setup)return;
+  resetting=true;playing=false;
+  const setup=test.setup;
+  const payload={scenario, drones:setup.drones, seed:setup.seed, geometry:testDefaults.geometry,
+    world:scenario==='terrain_follow'?'hills':testDefaults.world, spacing:testDefaults.spacing,
+    continuous:false, duration:24, controller:setup.controller||'baseline'};
+  for(const key of ['noise','dropout','obstacles'])if(setup[key]!==undefined)payload[key]=setup[key];
+  try{
+    notify('');
+    const s=await api('/api/reset',payload);
+    trails=[];history=[];lastTime=-1;center=[s.target[0]-2,0,1.4];
+    $('scenario').value=s.scenario;$('drones').value=String(s.positions.length);$('seed').value=s.seed;
+    $('geometry').value=s.geometry||payload.geometry;$('terrain').value=s.world||payload.world;
+    const spacings=[...$('compaction').options].map(o=>Number(o.value));
+    $('compaction').value=String(spacings.reduce((a,b)=>Math.abs(b-s.config.spacing)<Math.abs(a-s.config.spacing)?b:a));
+    activeTest=test;playing=true;scenarioHint();accept(s);
+    document.querySelector('.flight-panel').scrollIntoView({behavior:'smooth',block:'center'});
+  }catch(e){notify(e.message);}
+  finally{resetting=false;if(state)accept(state);}
+}
+function renderTests(){
+  const list=$('test-list');list.replaceChildren();
+  for(const test of testCatalog){
+    const card=el('article','test-card');card.id=`test-${test.number}`;card.dataset.number=String(test.number);
+    const top=el('div','test-top');
+    top.append(el('span','test-num',String(test.number).padStart(2,'0')),el('span','test-title',test.title));
+    const last=test.last;
+    const verdict=el('span',`verdict ${last?last.verdict.toLowerCase():''}`,last?`LAST RUN: ${last.verdict}`:'NOT RUN YET');
+    if(last)verdict.title=`${last.finished} · ${last.elapsed_s} s${last.report?` · ${last.report}`:''}\n${last.notes.join('\n')}`;
+    top.append(verdict);card.append(top);
+    const what=el('p');what.append(el('b','','What happens: '),test.purpose);card.append(what);
+    const pass=el('p');pass.append(el('b','','Passes when: '),test.criterion);card.append(pass);
+    if(test.scenarios.length){
+      const chips=el('div','chips');chips.append('Scenarios:');
+      for(const scenario of test.scenarios){
+        const chip=el(test.setup?'button':'span','chip',scenarioLabel(scenario));
+        if(chip.tagName==='BUTTON'){chip.type='button';chip.title=`Watch test ${test.number} on this scenario`;chip.onclick=()=>watch(test,scenario);}
+        chips.append(chip);
+      }
+      card.append(chips);
+    }
+    const actions=el('div','test-actions');
+    if(test.setup){
+      const button=el('button','watch',`▶ Watch test ${test.number}`);button.type='button';
+      button.title=`Fly ${scenarioLabel(test.scenarios[0])} with this test's setup`;
+      button.onclick=()=>watch(test,test.scenarios[0]);
+      actions.append(button);
+    }
+    const run=el('small');run.append('Run: ',el('code','',test.command),` · ${test.estimate} · ${test.source}`);
+    actions.append(run);card.append(actions);
+    if(test.watch){const note=el('p');note.append(el('b','','Watch the trained policy: '),el('code','',test.watch));card.append(note);}
+    else if(!test.setup){card.append(el('p','','Code-level checks only: nothing to fly. Results appear in the terminal.'));}
+    list.append(card);
+  }
+  scenarioHint();
+}
+async function loadTests(){
+  try{const data=await api('/api/tests');testCatalog=data.tests;testDefaults=data.defaults;renderTests();}
+  catch(e){$('test-list').replaceChildren(el('p','hint',`Could not load the test catalog: ${e.message}`));}
+}
+$('tests-refresh').onclick=loadTests;
+
+let modelReport=null;
+const stageColors=['#79d9bf','#e7bd79','#9fb7ff','#ee9389'];
+const num=(n,d=3)=>n===null||n===undefined?'—':Number(n).toFixed(d);
+const count=n=>n===null||n===undefined?'—':Number(n).toLocaleString();
+const pct=n=>n===null||n===undefined?'—':`${Math.round(n*100)}%`;
+async function loadModel(){
+  try{modelReport=await api('/api/model');}
+  catch(e){modelReport={available:false,error:e.message};}
+  renderModel();
+}
+$('model-refresh').onclick=loadModel;
+const clock=seconds=>{const s=Math.max(0,Math.round(seconds));return `${Math.floor(s/3600)}:${String(Math.floor(s%3600/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;};
+function renderTraining(t,hasModel){
+  const box=$('training-live');
+  if(!t||(!t.active&&hasModel)){box.hidden=true;return;}
+  box.hidden=false;
+  const done=t.progress===null||t.progress===undefined?0:Math.max(0,Math.min(1,t.progress));
+  $('training-bar').style.width=`${(done*100).toFixed(1)}%`;
+  $('training-title').textContent=t.active?`Training in progress · stage ${t.stage} of ${t.stages}`
+    :`Last training run · stage ${t.stage} of ${t.stages} · ${t.finished?'finished':'stopped'}`;
+  const parts=[t.phase];
+  if(t.phase==='behavior cloning')parts.push(`${t.cloning_rounds_done} cloning round(s) done`);
+  if(t.target_environment_steps)parts.push(`${count(t.environment_steps-t.start_environment_steps)} / ${count(t.target_environment_steps-t.start_environment_steps)} PPO steps (${pct(t.progress)})`);
+  if(t.steps_per_second)parts.push(`${count(Math.round(t.steps_per_second))} steps/s`);
+  if(t.eta_seconds!==null&&t.eta_seconds!==undefined)parts.push(`about ${clock(t.eta_seconds)} left in this stage`);
+  if(t.recent_failure_rate!==null&&t.recent_failure_rate!==undefined)parts.push(`failed episodes (last 100) ${pct(t.recent_failure_rate)}`);
+  if(t.last_score!==null&&t.last_score!==undefined)parts.push(`last validation ${num(t.last_score)} · best ${num(t.best_score)}`);
+  if(!t.active&&!t.finished)parts.push(`no update for ${clock(t.seconds_since_update)}; run make training again to continue`);
+  $('training-text').textContent=`${t.run} · ${parts.join(' · ')}`;
+}
+function renderModel(){
+  const r=modelReport,facts=$('model-facts'),checks=$('model-checks'),verdict=$('model-verdict');
+  facts.replaceChildren();checks.replaceChildren();$('model-table').replaceChildren();
+  verdict.className='verdict';
+  renderTraining(r&&r.training,r&&r.available);
+  if(!r||!r.available){
+    const live=r&&r.training&&r.training.active;
+    verdict.textContent=live?'TRAINING…':'NO MODEL YET';
+    $('model-description').textContent=live
+      ?'Training is running. The first model appears here after behavior cloning and the first validation (a few minutes); the viewer then switches to it automatically.'
+      :'No trained model yet. Start training with make training (or make run train to watch it here); the viewer picks up the best model automatically.';
+    checks.append(el('li','pending',live?'Waiting for the first validated model…':'Train the model first.'));
+    drawCurves();return;
+  }
+  if(r.error){
+    verdict.textContent='UNREADABLE';
+    $('model-description').textContent=`Could not read the training records of ${r.checkpoint}: ${r.error}`;
+    drawCurves();return;
+  }
+  const test=r.test;
+  if(test){verdict.classList.add(test.learned_correctly?'pass':'fail');verdict.textContent=test.learned_correctly?'LEARNED CORRECTLY':'NOT LEARNED YET';}
+  else verdict.textContent='NOT TESTED YET';
+  const training=r.training&&r.training.active;
+  $('model-description').textContent=test
+    ?`Loaded ${r.checkpoint}. The verdict comes from ${test.test_scenarios.length} scenarios × ${test.test_seeds[1]-test.test_seeds[0]+1} held-out seeds (${test.test_seeds[0]}–${test.test_seeds[1]}), never used for training or for choosing the checkpoint.`
+    :training
+      ?`Showing the best model so far: ${r.checkpoint}. It is replaced automatically whenever training saves a better one; the held-out verdict appears when the whole pipeline finishes.`
+      :`Loaded ${r.checkpoint}. Run make showcase (python -m swarmflow showcase) to test it on held-out seeds against the baseline and get a verdict.`;
+  const add=(key,value)=>facts.append(el('dt','',key),el('dd','',value));
+  const total=r.pipeline_steps||r.environment_steps;
+  add('Trained for',`${count(total)} PPO environment steps over ${r.stages.length||1} stage(s) · ${count(total*(r.drones||8))} drone transitions`);
+  add('Algorithm',r.algorithm||'—');
+  if(r.stages.length)add('Curriculum',r.stages.map(s=>`${s.label}: ${(s.scenarios||[]).join(', ')}${s.finished?'':' (unfinished)'}`).join('  →  '));
+  const cloning=r.stages.flatMap(s=>s.cloning||[]);
+  add('Warm start',cloning.length?`behavior cloning from the predictive controller, ${cloning.length} round(s) incl. DAgger, ${count(cloning[cloning.length-1].agent_samples)} labelled samples`:'none: PPO from random weights');
+  if(r.selection)add('Chosen checkpoint',`step ${count(r.selection.environment_steps)} · validation score ${num(r.selection.score)} · success ${pct(r.selection.success_rate)} · slot RMSE ${num(r.selection.mean_slot_rmse_m)} m`);
+  if(test)add('Held-out test score',`learned ${num(test.test_score_learned)}  vs  baseline ${num(test.test_score_baseline)}`);
+  if(test)for(const c of test.checks){
+    const li=el('li',c.passed?'pass':'fail');
+    li.append(el('b','',c.passed?'PASS':'FAIL'),el('span','',c.name),el('small','',c.detail));checks.append(li);
+  }
+  else checks.append(el('li','pending','Not tested on held-out seeds yet. Run make showcase.'));
+  if(test)renderModelTable(test.scenarios);
+  drawCurves();
+}
+function renderModelTable(rows){
+  const table=el('table'),head=el('tr');
+  for(const title of ['Scenario','Success · baseline','Success · learned','Slot RMSE · baseline','Slot RMSE · learned','Recovered · baseline','Recovered · learned','Min clearance · learned'])head.append(el('th','',title));
+  table.append(head);
+  for(const row of rows){
+    const b=row.baseline,l=row.learned,tr=el('tr');
+    const formation=['hold','follow','turn'].includes(row.scenario);
+    const cells=[[scenarioLabel(row.scenario)],[pct(b.success_rate)],[pct(l.success_rate),l.success_rate<1],
+      [`${num(b.mean_slot_rmse_m)} m`],[`${num(l.mean_slot_rmse_m)} m`,formation&&l.mean_slot_rmse_m>=.35],
+      [b.events?`${b.recovered_events}/${b.events}`:'—'],[l.events?`${l.recovered_events}/${l.events}`:'—',l.recovered_events<l.events],
+      [l.min_surface_clearance_m===null?'—':`${num(l.min_surface_clearance_m)} m`]];
+    for(const [text,bad] of cells)tr.append(el('td',bad?'bad':'',text));
+    table.append(tr);
+  }
+  $('model-table').append(table);
+}
+function plotSeries(canvas,series,options){
+  const g=canvas.getContext('2d'),[cw,ch]=fit(canvas,g);g.clearRect(0,0,cw,ch);
+  g.font='9px ui-monospace,monospace';g.fillStyle=colors.muted;
+  const points=series.flatMap(s=>s.points);
+  if(!points.length){g.fillText('No training history for this model yet',8,ch/2);return;}
+  const xs=points.map(p=>p[0]),ys=points.map(p=>p[1]),refs=options.refs||[];
+  const x0=Math.min(...xs),x1=Math.max(x0+1,...xs);
+  let y0=options.fixed?options.fixed[0]:Math.min(...ys,...refs),y1=options.fixed?options.fixed[1]:Math.max(...ys,...refs);
+  if(!options.fixed){const pad=(y1-y0||1)*.12;y0-=pad;y1+=pad;}
+  const left=40,right=cw-8,top=14,bottom=ch-18;
+  const X=x=>left+(x-x0)/(x1-x0)*(right-left),Y=y=>bottom-(y-y0)/(y1-y0)*(bottom-top);
+  g.lineWidth=1;g.strokeStyle=colors.grid;
+  for(const v of [y0,(y0+y1)/2,y1]){g.beginPath();g.moveTo(left,Y(v));g.lineTo(right,Y(v));g.stroke();g.fillText(options.label(v),2,Y(v)+3);}
+  g.strokeStyle='#e7bd7988';g.setLineDash([4,4]);
+  for(const v of refs){g.beginPath();g.moveTo(left,Y(v));g.lineTo(right,Y(v));g.stroke();}
+  g.setLineDash([]);
+  g.fillText(count(x0),left,ch-4);const end=`${count(x1)} steps`;g.fillText(end,right-g.measureText(end).width,ch-4);
+  series.forEach((s,i)=>{
+    if(!s.points.length)return;
+    const color=stageColors[i%stageColors.length],start=X(s.points[0][0]);
+    if(i>0){g.strokeStyle='#65818e';g.setLineDash([2,3]);g.beginPath();g.moveTo(start,top);g.lineTo(start,bottom);g.stroke();g.setLineDash([]);}
+    g.strokeStyle=color;g.lineWidth=1.6;g.beginPath();
+    s.points.forEach((p,k)=>k?g.lineTo(X(p[0]),Y(p[1])):g.moveTo(X(p[0]),Y(p[1])));g.stroke();
+    if(options.markers)for(const p of s.points){g.fillStyle=color;g.beginPath();g.arc(X(p[0]),Y(p[1]),2.2,0,Math.PI*2);g.fill();}
+    g.fillStyle=color;g.fillText(s.name,start+4,10);g.fillStyle=colors.muted;
+  });
+  if(options.best!==null&&options.best!==undefined){
+    const owner=[...series].reverse().find(s=>s.points.some(p=>p[2]===options.best));
+    const hit=owner&&owner.points.find(p=>p[2]===options.best);
+    if(hit){const x=X(hit[0]),y=Y(hit[1]);g.fillStyle=colors.target;g.beginPath();g.moveTo(x,y-6);g.lineTo(x+6,y);g.lineTo(x,y+6);g.lineTo(x-6,y);g.closePath();g.fill();}
+  }
+}
+function drawCurves(){
+  const r=modelReport,stages=(r&&r.available&&r.stages)||[];
+  const best=r&&r.selection?r.selection.environment_steps:null;
+  const series=pick=>stages.map(s=>({name:s.label,points:pick(s)}));
+  const x=row=>row.x??row.environment_steps;
+  plotSeries($('curve-score'),series(s=>s.evaluations.filter(e=>e.score!==null).map(e=>[x(e),e.score,e.environment_steps])),
+    {label:v=>v.toFixed(2),refs:[1],markers:true,best});
+  plotSeries($('curve-failure'),series(s=>s.updates.filter(u=>u.recent_failure_rate!==null).map(u=>[x(u),u.recent_failure_rate,u.environment_steps])),
+    {label:v=>`${Math.round(v*100)}%`,fixed:[0,1]});
+  plotSeries($('curve-rmse'),series(s=>s.updates.filter(u=>u.recent_slot_rmse_m!==null).map(u=>[x(u),u.recent_slot_rmse_m,u.environment_steps])),
+    {label:v=>v.toFixed(2),refs:[.35]});
+}
+window.addEventListener('resize',drawCurves);
+setInterval(()=>{
+  const t=modelReport&&modelReport.training;
+  if(modelReport&&modelReport.available&&!(t&&t.active))return;
+  loadModel();
+  if(!playing&&!resetting)api('/api/state').then(accept).catch(()=>{});
+},10000);
+
 api('/api/state').then(s=>{
   $('scenario').value=s.scenario;$('drones').value=String(s.positions.length);$('seed').value=s.seed;
   if(s.geometry)$('geometry').value=s.geometry;
   center=[s.target[0]-2,0,1.4];accept(s);
+  loadTests();
+  loadModel();
 }).catch(e=>notify(`Could not connect to the simulator: ${e.message}. Keep the Python server running and reload.`));
 requestAnimationFrame(tick);

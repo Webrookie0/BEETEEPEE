@@ -1,5 +1,7 @@
 # Showing how SwarmFlow learns
 
+> **Updated pipeline.** The full training is now `make training`, or `make run train` to watch it live (see [guide.md](../guide.md)), and the method is explained in [training.md](../training.md). The viewer loads `models/showcase/best.pt` automatically and shows the training curves and a held-out verdict. The short commands below still work for a quick live demonstration, but the sections about the launcher and the saved smoke policy describe the older setup.
+
 ## What is saved today
 
 The regular **Launch SwarmFlow.command** runs the programmed predictive controller. Pressing Start flight or Repeat flights simulates that controller; it does not train a neural network.

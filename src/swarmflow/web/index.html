@@ -3,17 +3,24 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>SwarmFlow · Flight laboratory</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/style.css?v=model2">
 </head>
 <body>
   <header><a class="brand" href="/" aria-label="SwarmFlow home"><span class="mark">╱╲</span> SwarmFlow<span class="version">LAB / 01</span></a><span class="header-note">COOPERATIVE FLIGHT SYSTEMS</span><span id="connection" class="connection">Connecting</span></header>
   <main>
     <section class="intro"><div><p class="eyebrow">FORMATION RECOVERY LABORATORY</p><h1>Move together.<br><span>Make room. Return.</span></h1><p class="description">Follow a reference target, yield to crossing objects,<br>and return to the same place in the formation.</p></div><div class="mission-stamp"><span>ACTIVE CONTROLLER</span><strong id="policy">Loading</strong><small>3D stabilized-flight model</small></div></section>
-    <div id="learning-note" class="learning-note" hidden><strong>RL evaluation mode</strong><p>You are viewing a saved neural policy. It may still drift or collide; this viewer does not train it. For the earlier flight demonstration, open <b>Launch SwarmFlow.command</b> and check that the active controller says <b>predictive baseline</b>.</p></div>
+    <div id="learning-note" class="learning-note" hidden><strong>Learned policy</strong><p>The drones are flown by the trained neural network (<code id="learning-checkpoint">best.pt</code>), with no baseline or safety filter behind it. The viewer only runs the saved weights; it does not train them. Switch <b>Controller</b> to the predictive baseline to compare on the same seed, and see <a href="#model">Did the model learn correctly?</a> below for its training curve and held-out test.</p></div>
     <div id="error" role="alert" hidden></div>
     <section class="workspace">
       <aside>
         <div class="section-label"><span>01 / MISSION</span><span class="dot"></span></div>
+        <label for="controller">Controller</label>
+        <select id="controller">
+          <option value="learned">Learned policy (trained model)</option>
+          <option value="baseline">Predictive baseline (hand-coded)</option>
+          <option value="slot">Slot-only (no avoidance)</option>
+        </select>
+        <p class="hint controller-hint" id="controller-hint"></p>
         <label for="scenario">Flight scenario</label>
         <select id="scenario">
           <option value="crossing">Crossing object</option>
@@ -28,6 +35,7 @@
           <option value="turn">Turning target</option>
           <option value="gust">Wind disturbance</option>
         </select>
+        <p class="hint scenario-tests" id="scenario-tests"></p>
         <label for="geometry">Formation geometry</label>
         <select id="geometry">
           <option value="grid" selected>Grid</option>
@@ -83,13 +91,51 @@
       </aside>
       <div class="flight-panel">
         <div class="flight-toolbar"><div><span class="live-dot"></span><span id="phase">READY TO FLY</span></div><div class="view-buttons"><button id="orbit" class="selected">Orbit</button><button id="axis">Axis</button><button id="export">Save PNG</button></div></div>
-        <div class="viewport"><canvas id="world" aria-label="Interactive 3D swarm simulation: drag to orbit, scroll to zoom"></canvas><div class="viewport-title"><strong id="mission-title">Crossing object</strong><span id="simulation-time">T + 00.00 s</span></div><div class="scale" id="view-hint">METERS · DRAG TO ORBIT · SCROLL TO ZOOM</div><div class="legend"><span><i class="drone-key"></i> Drone</span><span><i class="target-key"></i> Target</span><span><i class="slot-key"></i> Assigned slot</span><span><i class="object-key"></i> Object</span></div></div>
+        <div class="viewport"><canvas id="world" aria-label="Interactive 3D swarm simulation: drag to orbit, scroll to zoom"></canvas><div class="viewport-title"><span id="test-badge" class="test-badge" hidden></span><strong id="mission-title">Crossing object</strong><span id="simulation-time">T + 00.00 s</span></div><div class="scale" id="view-hint">METERS · DRAG TO ORBIT · SCROLL TO ZOOM</div><div class="legend"><span><i class="drone-key"></i> Drone</span><span><i class="target-key"></i> Target</span><span><i class="slot-key"></i> Assigned slot</span><span><i class="object-key"></i> Object</span></div></div>
         <div class="metrics"><div><span>LIVE SLOT ERROR</span><strong id="slot-error">—</strong><small>root mean square · m</small></div><div><span>MINIMUM CLEARANCE</span><strong id="clearance">—</strong><small>surface to surface · m</small></div><div><span>RECOVERED EVENTS</span><strong id="recovered">0 / 0</strong><small>completed / encountered</small></div><div><span>FLIGHT STATE</span><strong id="flight-state" class="word">Ready</strong><small id="state-note">Seed 7 · 8 agents</small></div></div>
         <div class="timeline"><div><span>SLOT ERROR / m</span><small>Last 12 simulated seconds</small></div><canvas id="chart" aria-label="Live root mean square slot error in meters over simulation time in seconds"></canvas></div>
       </div>
     </section>
+    <section class="tests model" id="model" aria-labelledby="model-title">
+      <div class="tests-head">
+        <div>
+          <p class="eyebrow">TRAINED MODEL · TRAINING HISTORY · HELD-OUT TEST</p>
+          <h2 id="model-title">Did the model learn correctly?</h2>
+          <p class="description" id="model-description">Loading the trained model…</p>
+        </div>
+        <div class="model-head-actions"><span id="model-verdict" class="verdict">…</span><button id="model-refresh" class="secondary" type="button">Refresh</button></div>
+      </div>
+      <div id="training-live" class="model-card training-live" hidden>
+        <h3 id="training-title">Training in progress</h3>
+        <div class="progress" aria-hidden="true"><span id="training-bar"></span></div>
+        <p id="training-text" class="training-text"></p>
+      </div>
+      <div class="model-grid">
+        <div class="model-card"><h3>Training</h3><dl id="model-facts" class="facts"></dl></div>
+        <div class="model-card"><h3>Acceptance checks on unseen seeds</h3><ul id="model-checks" class="checks"></ul></div>
+      </div>
+      <div class="model-charts">
+        <div class="model-card"><h3>Validation score</h3><small>Deterministic policy on selection seeds 5000+ · 1.0 is perfect · ◆ = saved best.pt</small><canvas id="curve-score" aria-label="Validation score over training steps"></canvas></div>
+        <div class="model-card"><h3>Training episodes that failed</h3><small>Share of the last 100 training episodes ending in a collision or crash</small><canvas id="curve-failure" aria-label="Training failure rate over training steps"></canvas></div>
+        <div class="model-card"><h3>Training slot error</h3><small>Mean slot RMSE (m) of the last 100 training episodes</small><canvas id="curve-rmse" aria-label="Training slot RMSE over training steps"></canvas></div>
+      </div>
+      <div class="model-card"><h3>Learned policy vs predictive baseline on held-out seeds</h3><div id="model-table" class="table-wrap"></div></div>
+    </section>
+    <section class="tests" id="tests" aria-labelledby="tests-title">
+      <div class="tests-head">
+        <div>
+          <p class="eyebrow">VALIDATION TESTS · REFERENCE</p>
+          <h2 id="tests-title">What each test number checks</h2>
+          <p class="description">Every number is a fixed experiment taken from <code>docs/validation.md</code> and <code>docs/research-plan.md</code>.
+            Run one from the terminal with <code>make test-N</code> (for example <code>make test-3</code>), or all with <code>make tests</code>.
+            Press <b>Watch</b> to fly that test's exact setup (scenario, drones, seed, sensing, controller) in the viewer above.</p>
+        </div>
+        <button id="tests-refresh" class="secondary" type="button">Refresh results</button>
+      </div>
+      <div id="test-list" class="test-list"><p class="hint">Loading test catalog…</p></div>
+    </section>
     <footer><span>One target. Persistent slots. Local observations.</span><span id="model-note">Reduced-order dynamics · illustrative drone attitude · baseline control</span></footer>
   </main>
-  <script src="/app.js?v=axis2"></script>
+  <script src="/app.js?v=model2"></script>
 </body>
 </html>

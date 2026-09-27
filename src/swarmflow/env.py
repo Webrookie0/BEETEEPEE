@@ -9,6 +9,9 @@ from .geometry import limit_norm, swept_distance
 from .scenarios import (SCENARIOS, Obstacle, crossing, formation, ground_height, make_canyon_segment,
                         make_obstacles, make_peaks, make_terrain, target_state)
 
+REWARD_ERROR_CAP_M = 5.0
+FAILURE_PENALTY = 100.0
+
 
 class SwarmEnv(ParallelEnv):
     metadata = {"name": "swarmflow_v0", "render_modes": []}
@@ -346,10 +349,7 @@ class SwarmEnv(ParallelEnv):
         for obj in self.active_obstacles():
             gap = np.linalg.norm(self.positions - obj.position(self.time), axis=1) - obj.radius - c.radius
             proximity += np.maximum(0, 0.45 - gap) ** 2
-        reward = -c.dt * (errors ** 2 + 0.12 * velocity_error ** 2 + 6 * proximity +
-                         0.005 * np.sum(self.commands ** 2, axis=1) + 0.002 * differences ** 2)
-        if self.failure:
-            reward -= 200.
+        reward = self._reward(errors, velocity_error, proximity, differences)
         self.returns += reward
         self._update_recovery()
         if self.continuous and not self.failure:
@@ -367,6 +367,22 @@ class SwarmEnv(ParallelEnv):
                 info["episode"] = summary
             self.agents = []
         return self.last_observations, dict(zip(agents, reward.tolist())), {a: terminated for a in agents}, {a: truncated for a in agents}, infos
+
+    def _reward(self, errors, velocity_error, proximity, differences):
+        """Per-drone reward: +1 per second alive minus bounded costs, and a team failure penalty.
+
+        Every cost is capped, so even a badly drifted swarm earns more (discounted) by staying
+        alive than by ending the episode: ending early can never be the easiest way out.
+        """
+        c = self.config
+        capped = np.minimum(errors, REWARD_ERROR_CAP_M)
+        tracking = np.where(capped <= 1.0, capped ** 2, 2.0 * capped - 1.0)
+        cost = (tracking + 0.12 * np.minimum(velocity_error, 3.0) ** 2 + 6 * proximity
+                + 0.005 * np.sum(self.commands ** 2, axis=1) + 0.001 * np.minimum(differences, 20.0) ** 2)
+        reward = c.dt * (1.0 - cost)
+        if self.failure:
+            reward -= FAILURE_PENALTY
+        return reward
 
     def summary(self):
         duration = max(self.time, 1e-9)

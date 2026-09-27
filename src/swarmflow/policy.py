@@ -8,12 +8,18 @@ from torch.nn import functional as F
 
 from .config import Config
 
-CHECKPOINT_FORMATS = ("swarmflow-v1", "swarmflow-v2")
-CHECKPOINT_FORMAT = "swarmflow-v2"
+CHECKPOINT_FORMATS = ("swarmflow-v1", "swarmflow-v2", "swarmflow-v3")
+CHECKPOINT_FORMAT = "swarmflow-v3"
+OBSERVATION_KEYS = ("self", "neighbors", "obstacles")
 
 
 def stack_observations(observations):
-    return {key: np.stack([o[key] for o in observations.values()]) for key in ("self", "neighbors", "obstacles")}
+    return {key: np.stack([o[key] for o in observations.values()]) for key in OBSERVATION_KEYS}
+
+
+def stack_teams(teams):
+    """Stack several environments' observation dicts; rows stay grouped by environment, then drone."""
+    return {key: np.stack([o[key] for team in teams for o in team.values()]) for key in OBSERVATION_KEYS}
 
 
 def tensors(observations, device="cpu"):
@@ -42,21 +48,15 @@ class SetEncoder(nn.Module):
         return torch.where(empty.unsqueeze(-1), out.new_zeros(out.shape), out)
 
 
-class ActorCritic(nn.Module):
-    def __init__(self, central_critic=False):
+class Encoder(nn.Module):
+    """Self MLP plus masked attention pooling over neighbors and obstacles, reduced to 64 features."""
+
+    def __init__(self):
         super().__init__()
-        self.central_critic = central_critic
         self.own = nn.Sequential(nn.Linear(17, 64), nn.Tanh())
         self.neighbors = SetEncoder()
         self.obstacles = SetEncoder()
         self.trunk = nn.Sequential(nn.Linear(192, 128), nn.Tanh(), nn.Linear(128, 64), nn.Tanh())
-        self.actor = nn.Linear(64, 3)
-        self.critic = nn.Linear(64, 1)
-        if central_critic:
-            self.central = nn.Sequential(nn.Linear(64, 64), nn.Tanh(), nn.Linear(64, 1))
-        self.log_std = nn.Parameter(torch.full((3,), -1.0))
-        nn.init.orthogonal_(self.actor.weight, 0.01)
-        nn.init.zeros_(self.actor.bias)
 
     def encode(self, observation):
         own = observation["self"]
@@ -64,6 +64,24 @@ class ActorCritic(nn.Module):
         encoded = torch.cat((self.own(own / scale), self.neighbors(observation["neighbors"]),
                              self.obstacles(observation["obstacles"])), dim=-1)
         return self.trunk(encoded)
+
+
+class ActorCritic(Encoder):
+    """Shared per-drone policy. With separate_critic the value function has its own encoder,
+    so value-loss gradients cannot overwrite the features the actor relies on."""
+
+    def __init__(self, central_critic=False, separate_critic=False, init_log_std=-1.0):
+        super().__init__()
+        self.central_critic = central_critic
+        self.separate_critic = separate_critic
+        self.actor = nn.Linear(64, 3)
+        self.critic = nn.Linear(64, 1)
+        if central_critic:
+            self.central = nn.Sequential(nn.Linear(64, 64), nn.Tanh(), nn.Linear(64, 1))
+        self.log_std = nn.Parameter(torch.full((3,), float(init_log_std)))
+        self.critic_encoder = Encoder() if separate_critic else None
+        nn.init.orthogonal_(self.actor.weight, 0.01)
+        nn.init.zeros_(self.actor.bias)
 
     def act_from_hidden(self, hidden):
         return self.actor(hidden)
@@ -80,27 +98,64 @@ class ActorCritic(nn.Module):
             return self.value_central(hidden, n_agents or hidden.size(0))
         return self.value_local(hidden)
 
-    def forward(self, observation):
+    def _critic_hidden(self, observation, actor_hidden):
+        return self.critic_encoder.encode(observation) if self.separate_critic else actor_hidden
+
+    def forward(self, observation, n_agents=None):
         hidden = self.encode(observation)
-        return self.act_from_hidden(hidden), self._value(hidden)
+        return self.act_from_hidden(hidden), self._value(self._critic_hidden(observation, hidden), n_agents)
+
+    def act(self, observation):
+        """Deterministic action in [-1, 1]: the squashed mean, as used for evaluation and viewing."""
+        return self.act_from_hidden(self.encode(observation)).tanh()
+
+    def value(self, observation, n_agents=None):
+        hidden = self.critic_encoder.encode(observation) if self.separate_critic else self.encode(observation)
+        return self._value(hidden, n_agents)
+
+    def critic_parameters(self):
+        modules = [self.critic]
+        if self.separate_critic:
+            modules.append(self.critic_encoder)
+        if self.central_critic:
+            modules.append(self.central)
+        return [p for module in modules for p in module.parameters()]
+
+    def actor_parameters(self):
+        critic = {id(p) for p in self.critic_parameters()}
+        return [p for p in self.parameters() if id(p) not in critic]
 
     def distribution(self, observation, n_agents=None):
         hidden = self.encode(observation)
-        return Normal(self.act_from_hidden(hidden), self.log_std.clamp(-5, 1).exp()), self._value(hidden, n_agents)
+        value = self._value(self._critic_hidden(observation, hidden), n_agents)
+        return Normal(self.act_from_hidden(hidden), self.log_std.clamp(-5, 1).exp()), value
 
     @staticmethod
     def log_probability(distribution, raw):
         correction = 2 * (math.log(2) - raw - F.softplus(-2 * raw))
         return (distribution.log_prob(raw) - correction).sum(-1)
 
-    def sample(self, observation):
-        distribution, value = self.distribution(observation)
+    def sample(self, observation, n_agents=None):
+        distribution, value = self.distribution(observation, n_agents)
         raw = distribution.sample()
         return raw.tanh(), raw, self.log_probability(distribution, raw), value
 
     def evaluate(self, observation, raw, n_agents=None):
         distribution, value = self.distribution(observation, n_agents)
         return self.log_probability(distribution, raw), distribution.entropy().sum(-1), value
+
+
+class ModelController:
+    """Drives a team with the deterministic policy of an in-memory model."""
+
+    def __init__(self, model, device="cpu"):
+        self.model = model
+        self.device = device
+
+    def __call__(self, observations):
+        with torch.no_grad():
+            action = self.model.act(tensors(stack_observations(observations), self.device))
+        return dict(zip(observations, action.cpu().numpy()))
 
 
 class LearnedController:
@@ -111,15 +166,15 @@ class LearnedController:
         self.config = Config(**data["config"])
         training = data.get("training") or {}
         central = bool(data.get("central_critic", training.get("central_critic", False)))
-        self.model = ActorCritic(central_critic=central)
+        separate = bool(data.get("separate_critic", False))
+        self.model = ActorCritic(central_critic=central, separate_critic=separate)
         try:
             self.model.load_state_dict(data["model"])
         except RuntimeError as error:
             raise ValueError("Checkpoint weights do not match this policy architecture") from error
         self.model.eval()
         self.metadata = {k: v for k, v in data.items() if k != "model" and k != "optimizer"}
+        self.controller = ModelController(self.model)
 
     def __call__(self, observations):
-        with torch.no_grad():
-            mean, _ = self.model(tensors(stack_observations(observations)))
-        return dict(zip(observations, mean.tanh().numpy()))
+        return self.controller(observations)

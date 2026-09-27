@@ -1,30 +1,75 @@
 import json
+import os
 import threading
+import time
 from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 import numpy as np
 
-from .baseline import PredictiveController
+from .baseline import PredictiveController, SlotController
 from .config import GEOMETRIES, WORLDS
 from .env import SwarmEnv
 from .scenarios import SCENARIOS
 
 
-def make_server(config, port=8765, checkpoint=None):
-    policy = None
+CONTROLLER_LABELS = {"learned": "learned checkpoint", "baseline": "predictive baseline",
+                     "slot": "slot-only (no avoidance)"}
+
+
+def _load(path):
+    import torch
+    from .policy import LearnedController
+    torch.set_num_threads(1)
+    return LearnedController(path)
+
+
+def _stamp(path):
+    return str(path), os.path.getmtime(path)
+
+
+def make_server(config, port=8765, checkpoint=None, follow=False, models_dir="models", interval=5.0):
+    """With follow=True the viewer keeps switching to the best model under models_dir as training saves it."""
+    state = {"learned": None, "checkpoint": None, "stamp": None, "seed": 7}
     if checkpoint:
-        import torch
-        from .policy import LearnedController
-        torch.set_num_threads(1)
-        policy = LearnedController(checkpoint)
-        config = policy.config
-    state = {"env": SwarmEnv(config), "controller": policy or PredictiveController(config),
-             "policy": "learned checkpoint" if policy else "predictive baseline", "seed": 7}
+        state.update(learned=_load(checkpoint), checkpoint=str(checkpoint), stamp=_stamp(checkpoint))
+        config = state["learned"].config
+    base = config
+
+    def controller_for(mode, cfg):
+        if mode == "learned":
+            return state["learned"]
+        return SlotController(cfg) if mode == "slot" else PredictiveController(cfg)
+
+    initial = "learned" if state["learned"] else "baseline"
+    state.update(env=SwarmEnv(config), controller=controller_for(initial, config), mode=initial,
+                 policy=CONTROLLER_LABELS[initial])
     state["env"].reset(seed=7)
     lock = threading.Lock()
     assets = Path(__file__).parent / "web"
+
+    def follow_best():
+        from .curriculum import default_model
+        while True:
+            time.sleep(interval)
+            try:
+                found = default_model(models_dir)
+                stamp = _stamp(found) if found else None
+                if stamp is None or stamp == state["stamp"]:
+                    continue
+                fresh = _load(found)
+            except (OSError, ValueError, KeyError, RuntimeError):
+                continue
+            with lock:
+                first = state["learned"] is None
+                state.update(learned=fresh, checkpoint=str(found), stamp=stamp)
+                if state["mode"] == "learned" or (first and state["mode"] == "baseline"):
+                    state.update(controller=fresh, mode="learned", policy=CONTROLLER_LABELS["learned"])
+            print(f"Viewer now uses {found}", flush=True)
+
+    if follow:
+        threading.Thread(target=follow_best, daemon=True).start()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format, *args):
@@ -41,14 +86,33 @@ def make_server(config, port=8765, checkpoint=None):
             self.wfile.write(body)
 
         def snapshot(self):
-            return {**state["env"].snapshot(), "policy": state["policy"], "seed": state["seed"],
-                    "config": state["env"].config.to_dict()}
+            return {**state["env"].snapshot(), "policy": state["policy"], "mode": state["mode"],
+                    "learned_available": state["learned"] is not None, "checkpoint": state["checkpoint"],
+                    "seed": state["seed"], "config": state["env"].config.to_dict()}
 
         def do_GET(self):
             route = urlparse(self.path).path
             if route == "/api/state":
                 with lock:
                     self.respond(self.snapshot())
+                return
+            if route == "/api/model":
+                from .curriculum import model_report, training_status
+                live = training_status(models_dir)
+                path = state["checkpoint"]
+                if not path:
+                    self.respond({"available": False, "training": live})
+                    return
+                try:
+                    self.respond({"available": True, **model_report(path), "training": live})
+                except (OSError, ValueError, KeyError) as error:
+                    self.respond({"available": True, "checkpoint": path, "error": str(error), "training": live})
+                return
+            if route == "/api/tests":
+                from .suite import catalog
+                self.respond({"tests": catalog(), "defaults": {"geometry": base.geometry, "world": base.world,
+                                                             "spacing": base.spacing,
+                                                             "obstacles": base.obstacles}})
                 return
             files = {"/": ("index.html", "text/html; charset=utf-8"),
                      "/app.js": ("app.js", "text/javascript; charset=utf-8"),
@@ -102,14 +166,30 @@ def make_server(config, port=8765, checkpoint=None):
                             raise ValueError(f"world must be one of {WORLDS}")
                         if not isinstance(duration, (int, float)) or isinstance(duration, bool) or not 1 <= float(duration) <= 7200:
                             raise ValueError("duration must be between 1 and 7200 seconds")
-                        capacity = 16 if continuous or world in ("canyon", "pillars", "hills") else env.config.obstacles
+                        controller = data.get("controller", state["mode"])
+                        if controller not in CONTROLLER_LABELS:
+                            raise ValueError("controller must be 'learned', 'baseline' or 'slot'")
+                        if controller == "learned" and not state["learned"]:
+                            raise ValueError("No trained policy is loaded; train one (make training) or "
+                                             "start the viewer with --checkpoint")
+                        sensing = {}
+                        for key in ("noise", "dropout"):
+                            value = data.get(key, getattr(base, key))
+                            if not isinstance(value, (int, float)) or isinstance(value, bool):
+                                raise ValueError(f"{key} must be numeric")
+                            sensing[key] = float(value)
+                        requested = data.get("obstacles", base.obstacles)
+                        if not isinstance(requested, int) or isinstance(requested, bool):
+                            raise ValueError("obstacles must be an integer")
+                        capacity = 16 if continuous or world in ("canyon", "pillars", "hills") else requested
                         new_config = replace(env.config, drones=count, geometry=geometry, world=world,
                                              spacing=spacing, duration=float(duration),
-                                             obstacles=max(env.config.obstacles, capacity))
+                                             obstacles=max(requested, capacity), **sensing)
                         new_env = SwarmEnv(new_config, scenario)
                         new_env.reset(seed=seed)
                         new_env.continuous = continuous
-                        state.update(env=new_env, seed=seed, controller=policy or PredictiveController(new_config))
+                        state.update(env=new_env, seed=seed, controller=controller_for(controller, new_config),
+                                     mode=controller, policy=CONTROLLER_LABELS[controller])
                     elif self.path == "/api/step":
                         count = data.get("steps", 1)
                         if not isinstance(count, int) or not 1 <= count <= 4:
@@ -137,9 +217,13 @@ def make_server(config, port=8765, checkpoint=None):
     return ThreadingHTTPServer(("127.0.0.1", port), Handler)
 
 
-def serve(config, port=8765, checkpoint=None):
-    server = make_server(config, port, checkpoint)
+def serve(config, port=8765, checkpoint=None, follow=False):
+    server = make_server(config, port, checkpoint, follow)
     print(f"SwarmFlow: http://127.0.0.1:{server.server_port} (Ctrl+C to stop)", flush=True)
+    print(f"Controller: {'learned checkpoint ' + str(checkpoint) if checkpoint else 'predictive baseline'}",
+          flush=True)
+    if follow:
+        print("Following models/: the viewer switches to each new best model automatically", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

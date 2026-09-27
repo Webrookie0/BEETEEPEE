@@ -7,6 +7,12 @@ from .config import Config
 from .env import SwarmEnv
 from .scenarios import SCENARIOS
 
+# Acceptance targets from docs/research-plan.md.
+FORMATION_SCENARIOS = ("hold", "follow", "turn")
+FORMATION_RMSE_M = 0.35
+RECOVERY_LIMIT_S = 5.0
+RECOVERY_RATE = 0.95
+
 
 def run_episode(config, scenario, seed, controller, trace=False):
     env = SwarmEnv(config, scenario)
@@ -55,6 +61,41 @@ def aggregate(episodes):
             "mean_recovery_s_conditional": float(np.mean(recovered)) if recovered else None,
             "max_recovery_s_conditional": max(recovered) if recovered else None}
     return result
+
+
+def selection_score(summary):
+    """Single number used to rank checkpoints; 1.0 means no failures, exact slots, every event recovered.
+
+    Survival dominates: one failed episode in five costs 0.2, the same as a 0.8 m slot RMSE.
+    """
+    rows = list(summary.values())
+    success = float(np.mean([row["success_rate"] for row in rows]))
+    rmse = float(np.mean([min(row["mean_slot_rmse_m"], 2.0) for row in rows]))
+    events = sum(row["events"] for row in rows)
+    recovery = sum(row["recovered_events"] for row in rows) / events if events else 1.0
+    return success - 0.25 * rmse - 0.25 * (1.0 - recovery)
+
+
+def learning_checks(report):
+    """Pass/fail checks of a report against the research-plan acceptance targets."""
+    episodes = report["episodes"]
+    failures = [e for e in episodes if e["failure"]]
+    events = [event for e in episodes for event in e["events"]]
+    quick = [event for e in episodes if not e["failure"] for event in e["events"]
+             if event["recovery_s"] is not None and event["recovery_s"] <= RECOVERY_LIMIT_S]
+    checks = [{"name": "No collisions or other failures", "passed": not failures,
+               "detail": f"{len(episodes) - len(failures)}/{len(episodes)} episodes completed"}]
+    if events:
+        checks.append({"name": f">= {RECOVERY_RATE:.0%} of disturbances recovered within {RECOVERY_LIMIT_S:g} s",
+                       "passed": len(quick) >= RECOVERY_RATE * len(events),
+                       "detail": f"{len(quick)}/{len(events)} events"})
+    formation = {name: row["mean_slot_rmse_m"] for name, row in report["summary"].items()
+                 if name in FORMATION_SCENARIOS}
+    if formation:
+        checks.append({"name": f"Slot RMSE below {FORMATION_RMSE_M:g} m when undisturbed",
+                       "passed": max(formation.values()) < FORMATION_RMSE_M,
+                       "detail": ", ".join(f"{name} {value:.3f} m" for name, value in formation.items())})
+    return checks
 
 
 def compare_reports(paths, output="runs/compare.json"):

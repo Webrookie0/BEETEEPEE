@@ -9,8 +9,7 @@ Start with the [research and execution plan](docs/research-plan.md). It connects
 SwarmFlow runs locally on Python 3.12. From the project directory, install the environment and development dependencies:
 
 ```sh
-cd /Users/sumit/Documents/Codex/developer/neww
-make install
+make install        # uv sync --python 3.12 --extra dev --cache-dir .uv-cache
 ```
 
 Start the interactive viewer with:
@@ -19,24 +18,17 @@ Start the interactive viewer with:
 make run
 ```
 
-Then open [http://127.0.0.1:8765](http://127.0.0.1:8765). The default controller is the predictive classical baseline. To run the learned-policy viewer after training:
+Then open [http://127.0.0.1:8765](http://127.0.0.1:8765). The viewer automatically loads the trained model in `models/showcase/best.pt` when it exists; otherwise it runs the predictive classical baseline. The **Controller** menu switches between the learned policy, the baseline and the slot-only ablation.
+
+**To train the model yourself, follow [guide.md](guide.md)**; the whole curriculum is one command:
 
 ```sh
-make view-learned
+caffeinate -i make training        # stage 1 -> 2 -> 3 (about 3 h on this Mac), then the held-out showcase test
+caffeinate -i make run train       # the same, with the viewer open: live progress, then the best model
+make run                           # viewer with the best model and its "Did the model learn correctly?" panel
 ```
 
-The learned viewer expects `runs/stage2-seed0/latest.pt`. Use `make help` to list all available commands. The main training flow is:
-
-```sh
-make train-smoke
-make eval-smoke
-make train-stage1
-make eval-stage1
-make train-stage2
-make eval-stage2
-```
-
-The smoke run checks the training and checkpoint pipeline; it is not evidence that the learned policy has solved the task. Stage 1 trains on hold/follow scenarios, and stage 2 resumes from stage 1 with crossing and head-on disturbances. Multi-seed repeats use `make train-stage1-multi` / `eval-stage1-multi` / `train-stage2-multi` / `eval-stage2-multi`. Extra eval targets: `eval-heldout` (seeds 100000+), `eval-noisy`, `eval-dense`. See [sofar.md](sofar.md) for the current research conclusions, setup summary and paper-to-implementation mapping.
+[training.md](training.md) explains the training method, the code, and why the earlier 2–5 minute runs did not learn. Use `make help` to list all commands. Extra baseline eval targets: `eval-heldout` (seeds 100000+), `eval-noisy`, `eval-dense`.
 
 ## Run the interactive laboratory
 
@@ -44,7 +36,7 @@ On this Mac, double-click **[Launch SwarmFlow.command](Launch%20SwarmFlow.comman
 
 The launcher works from this folder even if it is moved. On a new Mac, install [uv](https://docs.astral.sh/uv/getting-started/installation/) first; the launcher will create the Python environment on first use. That initial setup requires internet. Logs are saved to `runs/local-demo.log`.
 
-The launcher always selects the **predictive baseline**. It reuses only a predictive viewer and skips ports occupied by learned-policy viewers. If flight behavior changes after following the RL training guide, check **Active controller**: `learned checkpoint` is the experimental neural policy. Reopen the launcher for the earlier predictive demonstration. Both modes run locally; the controller determines their behavior.
+The launcher starts the same viewer as `make run`: with a trained model under `models/` it opens in **learned checkpoint** mode, otherwise in **predictive baseline** mode. It reuses a SwarmFlow viewer that is already running. Check **Active controller** to see which one is flying, and use the **Controller** menu to switch.
 
 From this `neww` directory:
 
@@ -57,7 +49,7 @@ Open **http://127.0.0.1:8765**. Choose a scenario and press **Start flight**. Du
 
 When a test finishes or fails, click **Run again** to reset and start the selected scenario in one click. **Repeat flights** starts flying immediately and automatically starts another episode whenever the current test ends. **Pause flight** stops the motion and turns repetition off. **Reset** resets the scene without starting it.
 
-The default viewer runs a **predictive classical baseline**. It is immediately usable and supplies a reference for evaluating RL. A learned policy is shown only when you explicitly load a checkpoint. Failure ends the flight; there is no hidden position correction or collision-avoidance wrapper around a learned policy.
+The **predictive classical baseline** is always available as the reference for evaluating RL. The learned policy is the trained network from `models/showcase/best.pt` (or `--checkpoint`). Failure ends the flight; there is no hidden position correction or collision-avoidance wrapper around a learned policy.
 
 ## What is implemented
 
@@ -67,7 +59,7 @@ The default viewer runs a **predictive classical baseline**. It is immediately u
 - Nine scenarios: hold, follow, crossing, head-on, repeated crossings, static spheres, a dense sphere cluster, smooth target turns, and wind gusts.
 - Live object injection, 3D browser visualization, individual slot markers, trails and telemetry.
 - A sampled predictive baseline, a no-avoidance ablation, and a shared neural policy with masked set encoders.
-- Behavior-cloning warm start, clipped independent PPO, checkpoint save/reload/resume, and seeded JSON evaluation.
+- Behavior-cloning warm start with DAgger, clipped parameter-sharing PPO with a separate critic, 8 parallel environments, reward scaling, a three-stage curriculum, best-checkpoint selection on validation seeds, resumable training, and a held-out showcase test. See [training.md](training.md).
 - Per-episode collision/failure, minimum surface clearance, slot and centroid RMSE, command smoothness, and per-event recovery measurements. Evaluation reports include success rate and slot-RMSE confidence intervals; `python -m swarmflow compare a.json b.json` diffs two reports.
 
 This first environment models **stabilized translational flight**, not full rotor/attitude physics. Drone tilt in the viewer is illustrative. There is no downwash, motor model, camera perception, physical contact response or hardware flight validation. The plan specifies a later PyBullet validation stage.
@@ -93,38 +85,32 @@ Initial measured results: **24/24 nominal eight-drone baseline episodes complete
 
 ## Train RL
 
-For a presentation walkthrough covering what is already saved, live training output, evaluation, learned-policy viewing, and resuming progress, see [Showing how SwarmFlow learns](docs/training-demo.md).
-
-First verify the pipeline with a small budget and a new output directory:
+Step-by-step commands are in **[guide.md](guide.md)**; the method, the code walkthrough and the research behind each choice are in **[training.md](training.md)**.
 
 ```sh
-.venv/bin/python -m swarmflow train --steps 512 --horizon 64 --epochs 2 --clone-steps 128 --clone-epochs 3 --scenarios hold follow crossing --output runs/my-smoke
-.venv/bin/python -m swarmflow eval --policy learned --checkpoint runs/my-smoke/latest.pt --scenarios follow crossing --seeds 3 --output runs/my-smoke/evaluation.json
+make test                          # unit tests
+make train-smoke                   # about 1 min; checks the machinery only, not the task
+caffeinate -i make training        # full curriculum for seed 0, then models/showcase (re-run to continue after an interruption)
+caffeinate -i make run train       # the same with the live viewer (python -m swarmflow pipeline --view)
+make train-full-multi              # seeds 0 1 2; the showcase keeps the best seed
+make train-stage1                  # or one stage at a time (train-stage2, train-stage3, continue-stageN, eval-stageN)
+make showcase                      # choose the best run, test it on held-out seeds, store it in models/showcase
 ```
 
-A smoke checkpoint tests the machinery, not the task. The included `runs/smoke-policy/latest.pt` is **not a qualified flight policy**. Its performance report is separate from the baseline report.
-
-For the first actual experiment, start with hold/follow, evaluate, then introduce crossing events while retaining simpler tasks:
-
-```sh
-.venv/bin/python -m swarmflow train --steps 50000 --clone-steps 2000 --scenarios hold follow --seed 0 --output runs/stage1-seed0
-.venv/bin/python -m swarmflow eval --policy learned --checkpoint runs/stage1-seed0/latest.pt --scenarios hold follow --seeds 20 --output runs/stage1-seed0/validation.json
-.venv/bin/python -m swarmflow train --resume runs/stage1-seed0/latest.pt --steps 100000 --scenarios hold follow crossing head_on --seed 0 --output runs/stage2-seed0
-.venv/bin/python -m swarmflow eval --policy learned --checkpoint runs/stage2-seed0/latest.pt --seeds 20 --output runs/stage2-seed0/validation.json
-.venv/bin/python -m swarmflow view --checkpoint runs/stage2-seed0/latest.pt
-```
-
-Budgets above are starting experiments, not convergence promises. Do not advance a stage merely because it used its step budget. Repeat with at least three independent training seeds and compare success, recovery and clearance together. PPO's reported `steps` count environment advances; multiply by drone count for agent transitions. Behavior-cloning samples are counted separately in the log. Default training is **parameter-sharing IPPO with a local critic**; use `--critic central` for a MAPPO-style value head and `--failure-reset` for pre-collision restores. Multi-seed stages: `make train-stage1-multi` / `train-stage2-multi`. Resume restores network and optimizer, then starts a fresh seeded episode; it is not exact trajectory continuation.
+Each stage writes `models/stageN-seedS/` with `best.pt` (best validated checkpoint), `latest.pt` (for continuing), logs and settings; the next stage starts from the previous stage's `best.pt`. PPO's reported `steps` count environment advances summed over the 8 parallel environments; multiply by the drone count for agent transitions. Default training is **parameter-sharing IPPO with a separate local critic**; use `--critic central` for a MAPPO-style value head and `--failure-reset` for pre-collision restores. Checkpoints from before this pipeline (`swarmflow-v1/v2` in `runs/`) can still be viewed but not resumed.
 
 ## Files
 
 - `src/swarmflow/env.py`, `scenarios.py`, `config.py`: environment, scenarios and experiment contract.
 - `src/swarmflow/baseline.py`: predictive and slot-only controllers.
 - `src/swarmflow/policy.py`, `train.py`, `evaluate.py`: learning and measurement.
+- `src/swarmflow/curriculum.py`: training stages, the resumable pipeline, and the showcase (best model + held-out test).
 - `src/swarmflow/server.py`, `web/`: local interactive viewer; no JavaScript build system or external CDN required.
 - `tests/`: behavior and algorithm regression checks.
+- `guide.md`, `training.md`: how to train, and how the training works.
 - `docs/research-plan.md`, `docs/implementation.md`, `docs/validation.md`: sources, specification, and evidence.
 - `sofar.md`: current research conclusions and paper-to-feature implementation map.
-- `runs/`: generated results and checkpoints, ignored by Git.
+- `models/`: trained stages (`stageN-seedS/`) and the selected model (`showcase/`).
+- `runs/`: evaluation reports, test-suite outputs and older checkpoints.
 
 The environment and all project artifacts live here in `neww`. No code or assets are imported from the earlier project or the reference repository.

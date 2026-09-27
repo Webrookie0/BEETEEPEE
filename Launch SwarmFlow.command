@@ -27,10 +27,13 @@ import subprocess
 import sys
 import time
 from urllib.error import URLError
-from urllib.request import urlopen
+from urllib.request import ProxyHandler, build_opener
+
+# Talk to 127.0.0.1 directly even when HTTP_PROXY is set in the environment.
+urlopen = build_opener(ProxyHandler({})).open
 
 project = Path(sys.argv[1])
-parser = argparse.ArgumentParser(description="Start the predictive SwarmFlow demo and open its browser window.")
+parser = argparse.ArgumentParser(description="Start the SwarmFlow viewer (trained model if one exists) and open it.")
 parser.add_argument("--no-browser", action="store_true", help="Start or reuse the server without opening a browser")
 parser.add_argument("--port", type=int, default=8765, help="Preferred local port (default: 8765)")
 args = parser.parse_args(sys.argv[2:])
@@ -48,9 +51,11 @@ def swarmflow_state(port):
         pass
     return None
 
-def is_predictive_demo(port):
-    state = swarmflow_state(port)
-    return state is not None and state["policy"] == "predictive baseline"
+def describe(state):
+    if state.get("learned_available"):
+        return (f"Controller: {state['policy']}. The trained model is loaded; switch Controller in the page "
+                "to compare it with the predictive baseline.")
+    return "Controller: predictive baseline. No trained model under models/ yet (see guide.md to train one)."
 
 def open_browser(url):
     if not args.no_browser:
@@ -60,15 +65,11 @@ port = None
 for candidate in range(args.port, args.port + 10):
     state = swarmflow_state(candidate)
     if state is not None:
-        if state["policy"] == "predictive baseline":
-            url = f"http://127.0.0.1:{candidate}/"
-            print(f"SwarmFlow predictive demo is already running: {url}", flush=True)
-            print("Controller: predictive baseline (programmed demonstration controller).", flush=True)
-            print("Click Repeat flights in the browser to keep the drones flying.", flush=True)
-            open_browser(url)
-            sys.exit(0)
-        print(f"Port {candidate} is running {state['policy']}; finding a port for the predictive demo.", flush=True)
-        continue
+        url = f"http://127.0.0.1:{candidate}/"
+        print(f"SwarmFlow is already running: {url}", flush=True)
+        print(describe(state), flush=True)
+        open_browser(url)
+        sys.exit(0)
     try:
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", candidate))
@@ -92,17 +93,19 @@ try:
     with log_path.open("a", buffering=1) as log:
         process = subprocess.Popen([sys.executable, "-m", "swarmflow", "view", "--port", str(port)],
                                    cwd=project, stdout=log, stderr=subprocess.STDOUT)
-        for _ in range(100):
+        state = None
+        for _ in range(150):
             if process.poll() is not None:
                 sys.exit(f"The simulator could not start. See {log_path}")
-            if is_predictive_demo(port):
+            state = swarmflow_state(port)
+            if state is not None:
                 break
             time.sleep(0.1)
         else:
             sys.exit(f"The simulator did not become ready. See {log_path}")
-        print(f"SwarmFlow predictive demo is ready: {url}", flush=True)
-        print("Controller: predictive baseline (programmed demonstration controller).", flush=True)
-        print("Click Repeat flights to run demonstrations continuously.", flush=True)
+        print(f"SwarmFlow is ready: {url}", flush=True)
+        print(describe(state), flush=True)
+        print("Press Run to fly; the model panel below the flight view shows whether it learned correctly.", flush=True)
         print("Keep this Terminal window open. Press Control+C here to stop the server.", flush=True)
         print(f"Log: {log_path}", flush=True)
         open_browser(url)
