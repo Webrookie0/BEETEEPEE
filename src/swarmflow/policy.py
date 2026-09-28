@@ -8,8 +8,8 @@ from torch.nn import functional as F
 
 from .config import Config
 
-CHECKPOINT_FORMATS = ("swarmflow-v1", "swarmflow-v2", "swarmflow-v3")
-CHECKPOINT_FORMAT = "swarmflow-v3"
+CHECKPOINT_FORMATS = ("swarmflow-v1", "swarmflow-v2", "swarmflow-v3", "swarmflow-v4")
+CHECKPOINT_FORMAT = "swarmflow-v4"
 OBSERVATION_KEYS = ("self", "neighbors", "obstacles")
 
 
@@ -27,11 +27,11 @@ def tensors(observations, device="cpu"):
 
 
 class SetEncoder(nn.Module):
-    def __init__(self):
+    def __init__(self, width=64):
         super().__init__()
-        self.net = nn.Sequential(nn.Linear(7, 32), nn.Tanh(), nn.Linear(32, 64), nn.Tanh())
-        self.query = nn.Parameter(torch.zeros(1, 1, 64))
-        self.attn = nn.MultiheadAttention(64, 2, batch_first=True)
+        self.net = nn.Sequential(nn.Linear(7, width // 2), nn.Tanh(), nn.Linear(width // 2, width), nn.Tanh())
+        self.query = nn.Parameter(torch.zeros(1, 1, width))
+        self.attn = nn.MultiheadAttention(width, max(2, width // 32), batch_first=True)
 
     def forward(self, rows):
         mask = rows[..., 7]
@@ -49,14 +49,14 @@ class SetEncoder(nn.Module):
 
 
 class Encoder(nn.Module):
-    """Self MLP plus masked attention pooling over neighbors and obstacles, reduced to 64 features."""
+    """Self MLP plus masked attention pooling over neighbors and obstacles, reduced to `width` features."""
 
-    def __init__(self):
+    def __init__(self, width=64):
         super().__init__()
-        self.own = nn.Sequential(nn.Linear(17, 64), nn.Tanh())
-        self.neighbors = SetEncoder()
-        self.obstacles = SetEncoder()
-        self.trunk = nn.Sequential(nn.Linear(192, 128), nn.Tanh(), nn.Linear(128, 64), nn.Tanh())
+        self.own = nn.Sequential(nn.Linear(17, width), nn.Tanh())
+        self.neighbors = SetEncoder(width)
+        self.obstacles = SetEncoder(width)
+        self.trunk = nn.Sequential(nn.Linear(3 * width, 2 * width), nn.Tanh(), nn.Linear(2 * width, width), nn.Tanh())
 
     def encode(self, observation):
         own = observation["self"]
@@ -70,18 +70,24 @@ class ActorCritic(Encoder):
     """Shared per-drone policy. With separate_critic the value function has its own encoder,
     so value-loss gradients cannot overwrite the features the actor relies on."""
 
-    def __init__(self, central_critic=False, separate_critic=False, init_log_std=-1.0):
-        super().__init__()
+    def __init__(self, central_critic=False, separate_critic=False, init_log_std=-1.0, width=64,
+                 min_log_std=-5.0):
+        super().__init__(width)
         self.central_critic = central_critic
         self.separate_critic = separate_critic
-        self.actor = nn.Linear(64, 3)
-        self.critic = nn.Linear(64, 1)
+        self.width = width
+        self.min_log_std = min_log_std
+        self.actor = nn.Linear(width, 3)
+        self.critic = nn.Linear(width, 1)
         if central_critic:
-            self.central = nn.Sequential(nn.Linear(64, 64), nn.Tanh(), nn.Linear(64, 1))
+            self.central = nn.Sequential(nn.Linear(width, width), nn.Tanh(), nn.Linear(width, 1))
         self.log_std = nn.Parameter(torch.full((3,), float(init_log_std)))
-        self.critic_encoder = Encoder() if separate_critic else None
+        self.critic_encoder = Encoder(width) if separate_critic else None
         nn.init.orthogonal_(self.actor.weight, 0.01)
         nn.init.zeros_(self.actor.bias)
+
+    def network_spec(self):
+        return {"width": self.width, "min_log_std": float(self.min_log_std)}
 
     def act_from_hidden(self, hidden):
         return self.actor(hidden)
@@ -128,7 +134,7 @@ class ActorCritic(Encoder):
     def distribution(self, observation, n_agents=None):
         hidden = self.encode(observation)
         value = self._value(self._critic_hidden(observation, hidden), n_agents)
-        return Normal(self.act_from_hidden(hidden), self.log_std.clamp(-5, 1).exp()), value
+        return Normal(self.act_from_hidden(hidden), self.log_std.clamp(self.min_log_std, 1).exp()), value
 
     @staticmethod
     def log_probability(distribution, raw):
@@ -167,7 +173,7 @@ class LearnedController:
         training = data.get("training") or {}
         central = bool(data.get("central_critic", training.get("central_critic", False)))
         separate = bool(data.get("separate_critic", False))
-        self.model = ActorCritic(central_critic=central, separate_critic=separate)
+        self.model = ActorCritic(central_critic=central, separate_critic=separate, **(data.get("network") or {}))
         try:
             self.model.load_state_dict(data["model"])
         except RuntimeError as error:

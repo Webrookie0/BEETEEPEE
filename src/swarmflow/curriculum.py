@@ -23,20 +23,30 @@ class Stage:
     resume_from: int | None = None
     clone_steps: int = 0
     dagger_rounds: int = 0
+    lr: float = 3e-4
+    failure_reset: bool = False
 
+
+# Version 2: every stage clones the teacher on its own scenarios (the first version only cloned
+# stage 1, so the network never saw an obstacle being avoided), keeps that data as a decaying
+# imitation loss, attributes crashes to the drones involved and warns 1 m before obstacles.
+PIPELINE_VERSION = 2
 
 STAGES = {
     1: Stage(1, "Formation keeping: hold, follow and turn with the target",
              ("hold", "follow", "turn"), 1_000_000, clone_steps=10_000, dagger_rounds=3),
     2: Stage(2, "Moving obstacles: crossing and head-on objects, keeping the stage 1 tasks",
-             ("hold", "follow", "turn", "crossing", "head_on"), 2_000_000, resume_from=1),
+             ("hold", "follow", "turn", "crossing", "head_on"), 2_000_000, resume_from=1,
+             clone_steps=20_000, dagger_rounds=3, lr=1e-4, failure_reset=True),
     3: Stage(3, "Full benchmark: repeated crossings, static spheres and wind gusts",
-             SHOWCASE_SCENARIOS, 2_000_000, resume_from=2),
+             SHOWCASE_SCENARIOS, 2_000_000, resume_from=2,
+             clone_steps=20_000, dagger_rounds=3, lr=1e-4, failure_reset=True),
 }
 
 # Shared PPO settings for every stage; 8 environments x 256 steps x 8 drones = 16,384 samples per update.
-COMMON = {"envs": 8, "horizon": 256, "epochs": 5, "minibatch": 2048, "lr": 3e-4, "eval_every": 100_000,
-          "eval_seeds": 5, "snapshot_every": 500_000}
+COMMON = {"envs": 8, "horizon": 256, "epochs": 5, "minibatch": 2048, "eval_every": 100_000,
+          "eval_seeds": 10, "snapshot_every": 500_000, "width": 128, "min_log_std": -3.0,
+          "entropy": 0.0, "bc_coef": 1.0, "bc_coef_end": 0.1, "pipeline_version": PIPELINE_VERSION}
 
 
 def stage_dir(number, seed, models_dir=MODELS_DIR):
@@ -49,6 +59,7 @@ def stage_arguments(number, seed=0, models_dir=MODELS_DIR):
     args = {**COMMON, "stage": number, "seed": seed, "scenarios": list(stage.scenarios),
             "eval_scenarios": list(stage.scenarios), "total_steps": stage.steps,
             "clone_steps": stage.clone_steps, "dagger_rounds": stage.dagger_rounds,
+            "lr": stage.lr, "failure_reset": stage.failure_reset,
             "output": str(stage_dir(number, seed, models_dir))}
     if stage.resume_from:
         args["resume"] = str(stage_dir(stage.resume_from, seed, models_dir) / "best.pt")
@@ -61,11 +72,9 @@ def train_stage(number, seed=0, models_dir=MODELS_DIR, config=None, retrain=Fals
     from .train import train
     folder = stage_dir(number, seed, models_dir)
     started_without_update = folder.exists() and not (folder / "latest.pt").exists() and any(folder.iterdir())
-    if (retrain or started_without_update) and folder.exists():
-        from datetime import datetime
-        archived = folder.with_name(f"{folder.name}-old-{datetime.now():%Y%m%d-%H%M%S}")
-        folder.rename(archived)
-        print(f"Moved previous run to {archived}", flush=True)
+    outdated = _pipeline_version(folder) not in (None, PIPELINE_VERSION)
+    if (retrain or started_without_update or outdated) and folder.exists():
+        _archive(folder, "trained by an older pipeline version" if outdated else "restarting this stage")
     if (folder / "finished.json").exists():
         print(f"Stage {number} (seed {seed}) already finished in {folder}; skipping.", flush=True)
         return folder / "best.pt"
@@ -83,6 +92,32 @@ def train_stage(number, seed=0, models_dir=MODELS_DIR, config=None, retrain=Fals
     return folder / "best.pt"
 
 
+def _pipeline_version(folder):
+    """Pipeline version that trained `folder` (1 for runs from before versioning), or None if untrained."""
+    for name in ("config.json", "summary.json"):
+        try:
+            settings = json.loads((Path(folder) / name).read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        return settings.get("pipeline_version") or 1
+    return None
+
+
+def _archive(folder, reason):
+    from datetime import datetime
+    archived = folder.with_name(f"{folder.name}-old-{datetime.now():%Y%m%d-%H%M%S}")
+    folder.rename(archived)
+    print(f"Moved {folder} to {archived} ({reason})", flush=True)
+
+
+def _archive_outdated(models_dir):
+    """Set aside stage runs and a showcase from older pipeline versions, so nothing mixes with them."""
+    folders = [f for f in Path(models_dir).glob("stage*-seed*") if re.fullmatch(r"stage\d+-seed\d+", f.name)]
+    for folder in sorted(folders) + [Path(models_dir) / "showcase"]:
+        if _pipeline_version(folder) not in (None, PIPELINE_VERSION):
+            _archive(folder, "trained by an older pipeline version")
+
+
 def run_pipeline(seeds=(0,), stages=(1, 2, 3), models_dir=MODELS_DIR, config=None, showcase=True,
                  test_seeds=20, **overrides):
     total = sum(STAGES[n].steps for n in stages) * len(seeds)
@@ -95,6 +130,7 @@ def run_pipeline(seeds=(0,), stages=(1, 2, 3), models_dir=MODELS_DIR, config=Non
     print(f"  seeds {list(seeds)}: {total:,} PPO steps in total, results in {Path(models_dir)}/stageN-seedS/; "
           f"the best model goes to {Path(models_dir) / 'showcase'}/", flush=True)
     print("  Re-run the same command after an interruption to continue where it stopped.", flush=True)
+    _archive_outdated(models_dir)
     for seed in seeds:
         for number in stages:
             train_stage(number, seed, models_dir, config, **overrides)
@@ -196,7 +232,8 @@ def build_showcase(runs=None, output=SHOWCASE_DIR, test_seeds=20, seed_start=TES
                                                       "recovered_events", "min_surface_clearance_m")},
                       "learned": {k: l[k] for k in ("success_rate", "mean_slot_rmse_m", "events",
                                                      "recovered_events", "min_surface_clearance_m")}})
-    summary = {"selected_run": str(source), "selected_environment_steps": chosen["environment_steps"],
+    summary = {"pipeline_version": _pipeline_version(source), "selected_run": str(source),
+               "selected_environment_steps": chosen["environment_steps"],
                "validation_score": chosen["score"], "candidates": candidates,
                "chain": [folder.name for folder in chain], "stages": [_stage_label(f) for f in chain],
                "training_stages": [_stage_record(folder) for folder in chain],

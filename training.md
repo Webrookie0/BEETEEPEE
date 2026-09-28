@@ -1,5 +1,7 @@
 # How SwarmFlow trains its drone policy
 
+> **Current version: 2.** After the first full training run, stages 2 and 3 were fixed; see **Part C** at the end. Where Part C differs from the sections before it, Part C is current. The main differences are: cloning in every stage, an imitation loss inside PPO, an exploration floor, a per-drone crash penalty, a 1 m obstacle warning, a wider network, and a total time of about 6 h.
+
 This document explains what the training does, why the old training finished in 2–5 minutes without learning, what was changed (and which research each change comes from), and how every part of the code works. It is written for preparing the presentation. The practical "which command do I run" steps are in [guide.md](guide.md).
 
 ---
@@ -789,3 +791,105 @@ All of these are shown in the viewer and in `models/showcase/SUMMARY.md`.
 **Is it ready for real drones?** No. The simulator models stabilized velocity-level flight, with no rotors, attitude, downwash or real sensors, and there is no formal safety guarantee. A physics-based validation (for example gym-pybullet-drones) would be the next step.
 
 **What if the verdict says NOT LEARNED YET?** Look at which check failed and at the curves, then follow section 6.3: continue the stage longer, use `--failure-reset` for collision-heavy stages, or train more seeds.
+
+---
+---
+
+# Part C: training version 2 (after the first full run) — current
+
+## 19. What the first full run showed
+
+Numbers from `training_logs.txt` and `models/` of the first complete run (seed 0):
+
+| Stage | Result |
+| --- | --- |
+| **1** (hold, follow, turn) | **Worked.** Validation score 0.997, 0 collisions in 2,080 training episodes, slot RMSE about 0.01 m. |
+| **2** (+ crossing, head-on) | Started at 0.345: crossing and head-on 0/5 each, because the network had never been taught to avoid anything. It peaked at 0.788 after 100k steps, then **fell to 0.2–0.3** for most of the stage. 20–50% of training episodes failed, and it ended at 0.196. |
+| **3** (all 8 scenarios) | Started from stage 2's early best. Best score 0.496 (at its start); double crossing 0% success, slalom slot error about 2.6 m. |
+| **Showcase** | 138/160 episodes without failure and 38/80 disturbances recovered, while the baseline reached 160/160 and 80/80. Slot error when undisturbed passed (under 0.35 m). Verdict: **NOT LEARNED YET**. |
+
+## 20. Why stages 2 and 3 failed
+
+1. **The network never saw an obstacle being avoided.** Behavior cloning ran only in stage 1, on hold, follow and turn. The teacher dodges perfectly (100% on every obstacle scenario), but that knowledge was never passed on.
+2. **Exploration collapsed.** The action noise shrank from 0.20 to 0.015 during stage 1, which was fine for precise formation flying. Stages 2 and 3 started with it, and it stayed around 0.035–0.04 (about ±0.1 m/s). A dodge needs a 1–2 m sideways move, which that much noise almost never produces by chance.
+3. **Blame was shared.** When any drone crashed, all 8 got −100. Seven of them had done nothing wrong, so the learning signal was mostly noise.
+4. **The warning came too late.** The obstacle closeness penalty started only 0.45 m from contact and was tiny next to −100, so the drones mostly learned about objects by hitting them.
+5. **Nothing held on to good behaviour.** PPO drifted away from the skill it found early. Selection used only 5 seeds per scenario, so scores jumped around (0.79 → 0.26 → 0.40 → 0.23).
+
+## 21. What version 2 changes, and where each idea comes from
+
+| # | Change | Why | Source | Code |
+| --- | --- | --- | --- | --- |
+| 1 | **Behavior cloning + DAgger in every stage**, on that stage's own scenarios. Stage 1 uses 4 rounds × 10,000 steps; stages 2 and 3 use 4 rounds × 20,000 steps, starting from the previous stage's best model. | The student learns obstacle avoidance from the teacher on the states it actually reaches. | Ross et al. 2011 (DAgger); Laskey et al. 2017 (DART) | `train.clone`, `train._collect`, `curriculum.STAGES` |
+| 2 | **Imitation loss inside PPO.** Each PPO minibatch adds the squared error to the teacher on 1,024 samples of the stage's teacher data. Its weight falls linearly from 1.0 to 0.1 over each stage. | PPO can improve on the teacher but cannot drift far from it; the pull weakens as training goes on. | Rajeswaran et al. 2018 (DAPG: demonstration term in the policy gradient, decaying weight); Schmitt et al. 2018 (Kickstarting: teacher loss with decaying weight) | `train` update loop (`bc_coef`, `bc_coef_end`) |
+| 3 | **Exploration that cannot collapse.** The noise std has a floor of 0.05 (`min_log_std = −3`), is reset to 0.2 at the start of each new stage, and there is no entropy bonus. | Enough noise to discover dodges, and a fresh start for each new skill. | PPO paper MuJoCo setting and the quadrotor-swarm training setup: no entropy bonus. Andrychowicz et al. 2021: the initial std matters. | `policy.ActorCritic(min_log_std)`, `train` (std reset) |
+| 4 | **Crash penalty only for the drones involved** (−100); the episode still ends for all. | Each drone is blamed for its own collisions. The others still lose their future reward because the episode ends. | Batra et al. 2021: individual collision penalties | `env.SwarmEnv._reward`, `culprits` |
+| 5 | **Obstacle warning zone.** A cost of 3 × (1 − gap / 1 m)² per second, capped at the value of two obstacles. | The drones feel an object coming about 1 m before contact and move away early. | Batra et al. 2021: smooth collision penalty with a fall-off radius | `env.OBSTACLE_MARGIN_M`, `OBSTACLE_WEIGHT` |
+| 6 | **Pre-collision replay** (`--failure-reset`) switched on in stages 2 and 3. | After a crash, the drones retry the same dangerous moment from about 2 s earlier, so rare hard situations get practised. | Huang et al. 2024 (replay of pre-collision states) | `train.Worker` |
+| 7 | **Learning rate 1×10⁻⁴ in stages 2 and 3** (3×10⁻⁴ in stage 1), annealed to 10%. | Smaller, safer steps when fine-tuning an already capable policy. | Quadrotor-swarm training setup: learning rate 1×10⁻⁴ | `curriculum.STAGES` |
+| 8 | **Wider network: 128 features.** Trunk 384→256→128, set encoders 7→64→128 with 4 attention heads. That is about 284k actor and 284k critic parameters, up from 72k each. | More capacity for the avoidance behaviour the teacher shows. | Quadrotor-swarm training setup: hidden size 256 (we use 128 to keep laptop time reasonable) | `policy.Encoder(width)` |
+| 9 | **Selection on 10 seeds per scenario** (was 5). | Less noisy choice of `best.pt`. | Henderson et al. 2018; Agarwal et al. 2021 | `curriculum.COMMON` |
+| 10 | **Pipeline version 2.** First-run folders are moved to `models/<name>-old-<date>` automatically. | Old and new runs never mix, and nothing is deleted. | — | `curriculum._archive_outdated` |
+
+What did **not** change: stage 1's recipe (it worked), PPO itself (clip 0.2, γ 0.99, λ 0.95, 5 epochs, KL stop 0.03, gradient clipping 0.5), the separate critic, reward scaling, time-limit bootstrapping, the budgets (1M / 2M / 2M PPO steps), and the held-out showcase test.
+
+## 22. Hyperparameters: ours compared with the references
+
+| Setting | SwarmFlow v2 | PPO paper, MuJoCo (Schulman et al. 2017) | Quadrotor-swarm training script (Batra et al. 2021 / Huang et al. 2024) |
+| --- | --- | --- | --- |
+| Algorithm | PPO, clipped, parameter sharing | PPO, clipped | PPO-family (Sample Factory), parameter sharing |
+| Learning rate | 3×10⁻⁴ (stage 1), 1×10⁻⁴ (stages 2–3), annealed to 10% | 3×10⁻⁴ | 1×10⁻⁴ |
+| Discount γ / GAE λ | 0.99 / 0.95 | 0.99 / 0.95 | 0.99 / 1.0 |
+| Data per update | 16,384 drone transitions (8 envs × 256 steps × 8 drones), minibatch 2,048, 5 epochs | 2,048 steps, minibatch 64, 10 epochs | rollout 128, batch 1,024 |
+| Entropy bonus | 0 | 0 | 0 |
+| Actor / critic | separate networks, tanh | separate networks, tanh | separate networks, tanh |
+| Hidden width | 128 | 64 | 256 |
+| Agents / neighbours seen | 8 / 6 nearest | 1 / – | 8 / 6 nearest |
+| Neighbour encoder | attention | – | attention |
+| Collision handling | −100 to the drones involved, smooth warning within 1 m, the episode ends | – | per-collision penalty with smooth fall-off, eased in over the first 300M steps; the episode continues |
+| Replay of hard moments | pre-collision restore in stages 2–3 | – | replay of pre-collision states (probability 0.75) |
+| Imitation | DAgger + decaying imitation loss | – | none (pure RL) |
+| Budget | 5M environment steps (40M drone transitions) | 1M steps per task | about 1 billion steps |
+
+The quadrotor-swarm column is recalled from the public `quad-swarm-rl` training script; check the exact values there before quoting them.
+
+**Why we don't copy everything:**
+
+- **Budget.** 1 billion steps at our speed would take about 35 days on this laptop. Imitation from our own teacher replaces most of that budget.
+- **Actions.** Their policy commands rotor thrusts on a full quadrotor model; ours commands velocities to a stabilized model, which is an easier control problem.
+- **Collisions.** In their simulator a collision does not end the episode. In our benchmark it does, so instead of letting episodes run on after a crash, we replay the moments before it.
+
+## 23. New time estimate (measured on this Mac)
+
+With the 128-wide network and the imitation loss, rollouts run at about 1,000 environment steps/s and one PPO update takes about 4 s, so training runs at about **333 steps/s** overall (up to 4 PyTorch threads).
+
+| Part | Approximate time |
+| --- | --- |
+| Stage 1: cloning + DAgger (~8 min), 1M PPO steps, validation | about 1 h |
+| Stage 2: cloning + DAgger on obstacle scenarios (~15 min), 2M PPO steps, validation | about 2 h |
+| Stage 3: the same on all 8 scenarios | 2–2.5 h |
+| Showcase test | about 10 min |
+| **Total for one seed** | **about 6 h** |
+
+## 24. What to watch in the new logs
+
+- **`[clone]` lines in stages 2 and 3**: `driver failures` in the DAgger rounds should be low, meaning the student already avoids objects the way the teacher does.
+- **`[eval:start]` of stage 2**: crossing and head-on should now succeed from the start. The first run started at 0/5.
+- **`imitation` on each PPO line**: it should stay small, close to the cloning error. A steady rise means PPO is moving away from the teacher; the validation score shows whether that helps or hurts.
+- **`std` on each PPO line**: it starts around 0.20 in each stage and never goes below 0.05.
+- **`failures(last 100)` in stages 2 and 3**: it should stay well below the 35–50% of the first run.
+- **The validation score** in stages 2 and 3 should hold steady or rise, not fall after the first 100k steps as it did in the first run.
+
+## 25. How to run version 2
+
+```sh
+caffeinate -i make run train      # or: make training (without the viewer)
+```
+
+- The first-run folders (`models/stage1-seed0` … `models/showcase`) are moved to `models/<name>-old-<date>` automatically when the pipeline starts, and all three stages train again. Nothing is deleted.
+- Everything else is as before: results go to `models/stageN-seed0/`, the best model to `models/showcase/`, the viewer follows the newest best model, and re-running the command continues after an interruption.
+
+**New references in this part:**
+
+- Schmitt et al., *Kickstarting Deep Reinforcement Learning* (2018): <https://arxiv.org/abs/1803.03835>
+- The quadrotor-swarm training code used by Batra et al. and Huang et al.: <https://github.com/Zhehui-Huang/quad-swarm-rl> (the repository linked in `docs/research-plan.md`)

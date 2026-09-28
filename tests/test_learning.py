@@ -4,6 +4,7 @@ import torch
 
 from swarmflow import Config, SwarmEnv
 from swarmflow.env import FAILURE_PENALTY
+from swarmflow.scenarios import Obstacle
 from swarmflow.policy import ActorCritic, LearnedController, SetEncoder, stack_observations, tensors
 from swarmflow.train import advantages, train
 
@@ -61,7 +62,7 @@ def test_training_checkpoint_reload_and_resume(tmp_path):
     assert rows[0]["type"] == "behavior_cloning"
     assert all(np.isfinite(row["value_loss"]) for row in rows if row["type"] == "ppo")
     assert all(row["failure_resets_this_run"] == 0 for row in rows if row["type"] == "ppo")
-    assert resumed.metadata["format"] == "swarmflow-v3"
+    assert resumed.metadata["format"] == "swarmflow-v4"
     assert resumed.metadata["central_critic"] is False
     assert resumed.metadata["separate_critic"] is True
 
@@ -93,6 +94,56 @@ def test_continue_finishes_the_original_budget(tmp_path):
     resumed = LearnedController(latest)
     assert resumed.metadata["environment_steps"] == 24
     assert resumed.metadata["training"]["scenarios"] == ["hold"]
+
+
+def test_resumed_stage_clones_its_scenarios_and_keeps_an_imitation_loss(tmp_path):
+    config = Config(drones=4, duration=.2)
+    first = train(config, ["hold"], total_steps=8, horizon=8, epochs=1, output=tmp_path / "a", envs=1,
+                  clone_steps=4, clone_epochs=1, eval_seeds=1, width=32, init_log_std=-3.0)
+    train(config, ["hold", "crossing"], total_steps=16, horizon=8, epochs=1, output=tmp_path / "b", envs=1,
+          resume=first.with_name("best.pt"), clone_steps=4, clone_epochs=1, dagger_rounds=1, eval_seeds=1,
+          critic_warmup=0, init_log_std=-1.6)
+    rows = [json.loads(row) for row in (tmp_path / "b" / "training.jsonl").read_text().splitlines()]
+    assert [row["driver"] for row in rows if row["type"] == "behavior_cloning"] == [
+        "teacher with action noise", "student (DAgger)"]
+    ppo = [row for row in rows if row["type"] == "ppo"]
+    assert all(row["bc_coef"] > 0 and row["bc_loss"] >= 0 for row in ppo)
+    assert ppo[0]["action_std"] > 0.19
+    resumed = LearnedController(tmp_path / "b" / "latest.pt")
+    assert resumed.metadata["network"] == {"width": 32, "min_log_std": -3.0}
+    assert resumed.model.width == 32
+
+
+def test_continue_rebuilds_teacher_data_for_the_imitation_loss(tmp_path):
+    config = Config(drones=4, duration=.2)
+    latest = train(config, ["hold"], total_steps=8, horizon=8, epochs=1, output=tmp_path, envs=1,
+                   clone_steps=4, clone_epochs=1, eval_seeds=1, critic_warmup=0)
+    data = torch.load(latest, weights_only=True)
+    data["training"]["target_environment_steps"] = 16
+    torch.save(data, latest)
+    train(config, ["hold"], total_steps=1, output=tmp_path, continue_run=True)
+    rows = [json.loads(row) for row in (tmp_path / "training.jsonl").read_text().splitlines()]
+    assert rows[-1]["type"] == "ppo" and rows[-1]["environment_steps"] == 16 and rows[-1]["bc_coef"] > 0
+
+
+def test_crash_penalty_goes_to_the_drones_involved():
+    env = SwarmEnv(Config(drones=3), "hold")
+    env.reset(seed=1)
+    env.positions[1] = env.positions[0] + np.array([0.2, 0, 0])
+    _, reward, terminated, *_ = env.step({a: np.zeros(3) for a in env.agents})
+    assert all(terminated.values()) and env.failure == "collision"
+    assert reward["drone_0"] < -FAILURE_PENALTY + 1 and reward["drone_1"] < -FAILURE_PENALTY + 1
+    assert reward["drone_2"] > -1
+
+
+def test_obstacle_warning_starts_one_metre_away():
+    env = SwarmEnv(Config(drones=2), "hold")
+    env.reset(seed=3)
+    near = env.positions[0] + np.array([0.5 + 0.3 + env.config.radius, 0, 0])
+    env.obstacle_list = [Obstacle("near", near, np.zeros(3), 0.3)]
+    _, reward, terminated, *_ = env.step({a: np.zeros(3) for a in env.agents})
+    assert not any(terminated.values())
+    assert reward["drone_0"] < reward["drone_1"] - 0.02
 
 
 def test_separate_critic_does_not_touch_actor_weights():

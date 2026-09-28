@@ -32,7 +32,15 @@ The baseline samples velocity candidates and predicts its own finite-response mo
 
 The actor combines a self MLP and separate masked multi-head attention set encoders for neighbors/obstacles (64-D per set, row-order invariant). A tanh-squashed Gaussian generates velocity actions. PPO stores unsquashed samples and uses the corresponding transformed log probability for both sampling and optimization. Entropy regularization uses latent Gaussian entropy as a proxy. The environment's vector speed limit remains part of the action mapping. Checkpoints use format `swarmflow-v3` (v1/v2 checkpoints still load for viewing and evaluation, but cannot be resumed because the reward and critic changed).
 
-The per-drone reward is `dt·(1 − cost)` minus 100 on a team failure, where cost is the slot error term (`e²` up to 1 m, then `2e − 1`, with e capped at 5 m), 0.12·velocity error² (capped), 6·proximity inside 0.45 m surface clearance, 0.005·command² and 0.001·command rate² (capped). Every cost is bounded, so with γ = 0.99 staying alive always has a higher return than failing.
+The per-drone reward is `dt·(1 − cost)`, minus 100 for each drone involved in a failure: the drones that collided, touched the ground or left the world. The episode still ends for the whole team. The cost is the sum of:
+
+- the slot error term: `e²` up to 1 m, then `2e − 1`, with e capped at 5 m;
+- 0.12·velocity error² (capped);
+- 6·proximity to the nearest drone inside 0.45 m surface clearance;
+- 3·Σ(1 − gap / 1 m)² over objects closer than 1 m (surface to surface), capped at the value of two objects;
+- 0.005·command² and 0.001·command rate² (capped).
+
+Every cost is bounded, so with γ = 0.99 staying alive always has a higher return than failing.
 
 Optional cloning uses baseline rollouts with injected action noise, then DAgger rounds in which the student flies and the baseline labels its states; fresh on-policy PPO trajectories follow, starting with a few critic-only updates. Rollouts come from several parallel environments; rewards are scaled by a running standard deviation of the discounted return. GAE bootstraps the value of final observations on time limits, masks terminal failures and stops its recurrence at every reset. Advantage normalization, separate actor/critic gradient clipping, ratio clipping, approximate-KL early stopping and linear learning-rate annealing are implemented. `--failure-reset` restores a captured pre-collision state (about 2 s earlier, at most twice per episode) and continues with fresh on-policy steps. Recurrent memory and automatic curriculum promotion are not implemented; the three stages are fixed budgets in `curriculum.py`.
 

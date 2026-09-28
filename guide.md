@@ -22,7 +22,7 @@ There are two ways to start the full training. Both run the same training and st
 | `make training` | Full training in the terminal: stage 1 → 2 → 3, then the showcase test. | `.venv/bin/python -m swarmflow pipeline` |
 | `make run train` (same as `make run-train`) | The same training, **plus the viewer** in your browser. It shows live progress, flies the best model found so far, and switches to the final best model at the end. | `.venv/bin/python -m swarmflow pipeline --view` |
 
-On a Mac, put `caffeinate -i` in front so the laptop does not sleep during the roughly 3-hour run:
+On a Mac, put `caffeinate -i` in front so the laptop does not sleep during the roughly 6-hour run:
 
 ```sh
 caffeinate -i make run train
@@ -33,8 +33,11 @@ caffeinate -i make run train
 1. **Stage 1, formation keeping** (hold, follow, turn), saved to `models/stage1-seed0/`:
    - behavior cloning from the hand-coded controller, with 3 DAgger rounds;
    - 1,000,000 PPO steps.
-2. **Stage 2, moving obstacles** (adds crossing and head-on objects), saved to `models/stage2-seed0/`: starts from stage 1's `best.pt`, then 2,000,000 PPO steps.
-3. **Stage 3, the full benchmark** (adds repeated crossings, static spheres and wind), saved to `models/stage3-seed0/`: starts from stage 2's `best.pt`, then 2,000,000 PPO steps.
+2. **Stage 2, moving obstacles** (adds crossing and head-on objects), saved to `models/stage2-seed0/`:
+   - starts from stage 1's `best.pt`;
+   - behavior cloning + DAgger on these obstacle scenarios, so the network learns avoidance from the teacher;
+   - 2,000,000 PPO steps with an imitation loss that fades out over the stage.
+3. **Stage 3, the full benchmark** (adds repeated crossings, static spheres and wind), saved to `models/stage3-seed0/`: the same recipe, starting from stage 2's `best.pt`, 2,000,000 PPO steps.
 4. **Showcase**:
    - picks the best final model (across all trained seeds);
    - tests it against the hand-coded baseline on 8 scenarios × 20 seeds it has never seen;
@@ -61,12 +64,13 @@ Every 100,000 steps the model is validated. Whenever it beats its previous best 
 
 | Part | Time |
 | --- | --- |
-| Behavior cloning + DAgger | 5–7 min |
-| Stage 1 | 30–40 min |
-| Stage 2 | about 1 h |
-| Stage 3 | about 1 h |
-| Showcase test | 7–10 min |
-| **Total** | **about 3 h** |
+| Stage 1 (cloning ~8 min + 1M PPO steps) | about 1 h |
+| Stage 2 (cloning on obstacle scenarios ~15 min + 2M PPO steps) | about 2 h |
+| Stage 3 (the same on all 8 scenarios) | 2–2.5 h |
+| Showcase test | about 10 min |
+| **Total** | **about 6 h** |
+
+This is version 2 of the training. After the first full run, stages 2 and 3 were fixed; [training.md](training.md) Part C explains why and what changed. When you start it, the first run's folders are moved to `models/<name>-old-<date>` automatically, and everything trains again. Nothing is deleted.
 
 ### If it stops
 
@@ -78,7 +82,7 @@ Ctrl+C, a crash or the laptop sleeping loses nothing. Run the **same command aga
 ### More seeds (recommended for the report)
 
 ```sh
-caffeinate -i make train-full-multi        # seeds 0 1 2, about 9 h  (python -m swarmflow pipeline --seeds 0 1 2)
+caffeinate -i make train-full-multi        # seeds 0 1 2, about 18 h  (python -m swarmflow pipeline --seeds 0 1 2)
 make training SEED=1                       # or add one seed at a time
 ```
 

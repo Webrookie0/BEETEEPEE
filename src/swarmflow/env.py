@@ -11,6 +11,8 @@ from .scenarios import (SCENARIOS, Obstacle, crossing, formation, ground_height,
 
 REWARD_ERROR_CAP_M = 5.0
 FAILURE_PENALTY = 100.0
+OBSTACLE_MARGIN_M = 1.0
+OBSTACLE_WEIGHT = 3.0
 
 
 class SwarmEnv(ParallelEnv):
@@ -99,6 +101,7 @@ class SwarmEnv(ParallelEnv):
         self.events = {}
         self.collision = False
         self.failure = None
+        self.culprits = np.zeros(self.config.drones, dtype=bool)
         self.min_clearance = float("inf")
         self.error_integral = 0.
         self.centroid_integral = 0.
@@ -255,10 +258,13 @@ class SwarmEnv(ParallelEnv):
         return result
 
     def _clearance(self, before, after, start, end):
+        """Minimum surface clearance of each drone over one straight integration segment."""
         c = self.config
+        clearance = np.full(c.drones, np.inf)
         a, b = np.triu_indices(c.drones, 1)
         distances = swept_distance(before[a] - before[b], after[a] - after[b]) - 2 * c.radius
-        clearance = float(np.min(distances))
+        np.minimum.at(clearance, a, distances)
+        np.minimum.at(clearance, b, distances)
         for obstacle in self.obstacle_list:
             lo, hi = max(start, obstacle.start), min(end, obstacle.end)
             if lo >= hi:
@@ -267,7 +273,7 @@ class SwarmEnv(ParallelEnv):
             p0 = before + alpha * (after - before)
             p1 = before + beta * (after - before)
             dist = swept_distance(p0 - obstacle.position(lo), p1 - obstacle.position(hi))
-            clearance = min(clearance, float(np.min(dist) - c.radius - obstacle.radius))
+            clearance = np.minimum(clearance, dist - c.radius - obstacle.radius)
         return clearance
 
     def _update_recovery(self):
@@ -323,18 +329,23 @@ class SwarmEnv(ParallelEnv):
             self.velocities += (self.accelerations + wind) * h
             self.positions += self.velocities * h
             clearance = self._clearance(before, self.positions, t0, t0 + h)
-            self.min_clearance = min(self.min_clearance, clearance)
-            if clearance <= 0:
+            self.min_clearance = min(self.min_clearance, float(clearance.min()))
+            if np.any(clearance <= 0):
                 self.collision = True
                 self.failure = "collision"
+                self.culprits |= clearance <= 0
             world = "hills" if self.scenario == "terrain_follow" else c.world
             floor = c.radius + ground_height(self.positions[:, 0], self.positions[:, 1], world, self.peaks)
-            if np.any(self.positions[:, 2] <= floor):
+            grounded = self.positions[:, 2] <= floor
+            outside = (self.positions[:, 2] >= 10 - c.radius) | np.any(np.abs(self.positions[:, :2]) >= 60 - c.radius,
+                                                                      axis=1)
+            if np.any(grounded):
                 self.collision = True
                 self.failure = self.failure or "terrain"
-            elif (np.any(self.positions[:, 2] >= 10 - c.radius)
-                    or np.any(np.abs(self.positions[:, :2]) >= 60 - c.radius)):
+                self.culprits |= grounded
+            elif np.any(outside):
                 self.failure = self.failure or "world_boundary"
+                self.culprits |= outside
         self.steps += 1
         self.time = self.steps * c.dt
         errors = np.linalg.norm(self.positions - self.slots(), axis=1)
@@ -346,10 +357,11 @@ class SwarmEnv(ParallelEnv):
         pair = np.linalg.norm(self.positions[:, None] - self.positions[None, :], axis=-1)
         np.fill_diagonal(pair, np.inf)
         proximity = np.maximum(0, 0.45 - (pair.min(axis=1) - 2 * c.radius)) ** 2
+        danger = np.zeros(c.drones)
         for obj in self.active_obstacles():
             gap = np.linalg.norm(self.positions - obj.position(self.time), axis=1) - obj.radius - c.radius
-            proximity += np.maximum(0, 0.45 - gap) ** 2
-        reward = self._reward(errors, velocity_error, proximity, differences)
+            danger += np.maximum(0, 1 - gap / OBSTACLE_MARGIN_M) ** 2
+        reward = self._reward(errors, velocity_error, proximity, danger, differences)
         self.returns += reward
         self._update_recovery()
         if self.continuous and not self.failure:
@@ -368,20 +380,23 @@ class SwarmEnv(ParallelEnv):
             self.agents = []
         return self.last_observations, dict(zip(agents, reward.tolist())), {a: terminated for a in agents}, {a: truncated for a in agents}, infos
 
-    def _reward(self, errors, velocity_error, proximity, differences):
-        """Per-drone reward: +1 per second alive minus bounded costs, and a team failure penalty.
+    def _reward(self, errors, velocity_error, proximity, danger, differences):
+        """Per-drone reward: +1 per second alive minus bounded costs, and a failure penalty.
 
-        Every cost is capped, so even a badly drifted swarm earns more (discounted) by staying
+        Every cost is capped, so even a badly drifted drone earns more (discounted) by staying
         alive than by ending the episode: ending early can never be the easiest way out.
+        The failure penalty goes to the drones that collided, grounded or left the world; the
+        episode still ends for the whole team.
         """
         c = self.config
         capped = np.minimum(errors, REWARD_ERROR_CAP_M)
         tracking = np.where(capped <= 1.0, capped ** 2, 2.0 * capped - 1.0)
         cost = (tracking + 0.12 * np.minimum(velocity_error, 3.0) ** 2 + 6 * proximity
+                + OBSTACLE_WEIGHT * np.minimum(danger, 2.0)
                 + 0.005 * np.sum(self.commands ** 2, axis=1) + 0.001 * np.minimum(differences, 20.0) ** 2)
         reward = c.dt * (1.0 - cost)
         if self.failure:
-            reward -= FAILURE_PENALTY
+            reward -= np.where(self.culprits, FAILURE_PENALTY, 0.0)
         return reward
 
     def summary(self):
@@ -414,7 +429,7 @@ class SwarmEnv(ParallelEnv):
                  ("time", "steps", "collision", "failure", "min_clearance",
                   "error_integral", "centroid_integral", "smoothness_integral", "seed_value")}
         for key in ("positions", "velocities", "commands", "accelerations", "returns",
-                    "guide_position", "guide_velocity"):
+                    "guide_position", "guide_velocity", "culprits"):
             state[key] = getattr(self, key).copy()
         for key in ("obstacle_list", "events", "last_observations", "peaks"):
             state[key] = copy.deepcopy(getattr(self, key))
@@ -426,7 +441,7 @@ class SwarmEnv(ParallelEnv):
                     "error_integral", "centroid_integral", "smoothness_integral", "seed_value"):
             setattr(self, key, state[key])
         for key in ("positions", "velocities", "commands", "accelerations", "returns",
-                    "guide_position", "guide_velocity"):
+                    "guide_position", "guide_velocity", "culprits"):
             setattr(self, key, np.array(state[key], copy=True))
         for key in ("obstacle_list", "events", "last_observations", "peaks"):
             setattr(self, key, copy.deepcopy(state[key]))

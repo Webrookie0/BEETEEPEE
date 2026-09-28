@@ -100,9 +100,13 @@ class Worker:
         return result
 
 
-def _fit_clone(model, optimizer, data, labels, epochs, rng, device, batch_size=1024):
-    batch = tensors({k: np.concatenate(v) for k, v in data.items()}, device)
-    target = torch.as_tensor(np.concatenate(labels), dtype=torch.float32, device=device)
+def _demo_tensors(data, labels, device):
+    return (tensors({k: np.concatenate(v) for k, v in data.items()}, device),
+            torch.as_tensor(np.concatenate(labels), dtype=torch.float32, device=device))
+
+
+def _fit_clone(model, optimizer, demo, epochs, rng, device, batch_size=1024):
+    batch, target = demo
     parameters = model.actor_parameters()
     losses = []
     for _ in range(epochs):
@@ -116,49 +120,73 @@ def _fit_clone(model, optimizer, data, labels, epochs, rng, device, batch_size=1
             torch.nn.utils.clip_grad_norm_(parameters, 0.5)
             optimizer.step()
             losses.append(float(loss.detach().cpu()))
-    return float(np.mean(losses)), len(target)
+    return float(np.mean(losses))
 
 
-def clone(model, config, scenarios, steps, epochs, rng, device, rounds=0, noise=0.3):
+def _collect(model, teacher, config, scenarios, steps, rng, device, data, labels, noise=None):
+    """Fly `steps` team steps and record every state with the teacher's action as its label.
+
+    With `noise` the teacher flies with that much action noise (DART); otherwise the student
+    flies (DAgger). Returns (episodes finished, failed episodes).
+    """
+    student = ModelController(model, device)
+    env = None
+    episodes = failures = 0
+    for _ in range(steps):
+        if env is None or not env.agents:
+            env = SwarmEnv(config, str(rng.choice(scenarios)))
+            observations, _ = env.reset(seed=int(rng.integers(*TRAINING_SEEDS)))
+        targets = teacher(observations)
+        packed = stack_observations(observations)
+        for key in data:
+            data[key].append(packed[key])
+        labels.append(np.stack(list(targets.values())))
+        if noise is not None:
+            actions = {a: np.clip(v + rng.normal(0, noise, 3), -1, 1) for a, v in targets.items()}
+        else:
+            actions = student(observations)
+        observations, _, _, _, _ = env.step(actions)
+        if not env.agents:
+            episodes += 1
+            failures += int(env.failure is not None)
+    return episodes, failures
+
+
+def clone(model, config, scenarios, steps, epochs, rng, device, rounds=0, noise=0.3, report=None):
     """Behavior cloning from the predictive controller, followed by DAgger rounds.
 
     Round 0 flies the teacher with injected action noise while recording its clean actions, so the
     data already contains states away from the slots. Every later round flies the current student,
     labels each state it visits with the teacher's action and refits on all data collected so far.
+    Returns the log rows and the aggregated (observations, teacher actions) dataset.
     """
     teacher = PredictiveController(config)
-    student = ModelController(model, device)
     optimizer = torch.optim.Adam(model.actor_parameters(), lr=5e-4)
     data = {key: [] for key in OBSERVATION_KEYS}
     labels = []
     rows = []
+    demo = None
     for round_index in range(rounds + 1):
-        env = None
-        episodes = failures = 0
-        for _ in range(steps):
-            if env is None or not env.agents:
-                env = SwarmEnv(config, str(rng.choice(scenarios)))
-                observations, _ = env.reset(seed=int(rng.integers(*TRAINING_SEEDS)))
-            targets = teacher(observations)
-            packed = stack_observations(observations)
-            for key in data:
-                data[key].append(packed[key])
-            labels.append(np.stack(list(targets.values())))
-            if round_index == 0:
-                actions = {a: np.clip(v + rng.normal(0, noise, 3), -1, 1) for a, v in targets.items()}
-            else:
-                actions = student(observations)
-            observations, _, _, _, _ = env.step(actions)
-            if not env.agents:
-                episodes += 1
-                failures += int(env.failure is not None)
-        mse, samples = _fit_clone(model, optimizer, data, labels, epochs, rng, device)
+        episodes, failures = _collect(model, teacher, config, scenarios, steps, rng, device, data, labels,
+                                      noise if round_index == 0 else None)
+        demo = _demo_tensors(data, labels, device)
+        mse = _fit_clone(model, optimizer, demo, epochs, rng, device)
         rows.append({"type": "behavior_cloning", "round": round_index,
                      "driver": "teacher with action noise" if round_index == 0 else "student (DAgger)",
-                     "environment_steps": steps, "agent_samples": samples, "epochs": epochs,
+                     "environment_steps": steps, "agent_samples": len(demo[1]), "epochs": epochs,
                      "driver_episodes_finished": episodes, "driver_failures": failures,
                      "final_epoch_mse": mse})
-    return rows
+        if report:
+            report(rows[-1])
+    return rows, demo
+
+
+def demonstrations(model, config, scenarios, steps, rng, device):
+    """Teacher-labelled states visited by the current student, without refitting (used by --continue)."""
+    data = {key: [] for key in OBSERVATION_KEYS}
+    labels = []
+    _collect(model, PredictiveController(config), config, scenarios, steps, rng, device, data, labels)
+    return _demo_tensors(data, labels, device)
 
 
 def _clock(seconds):
@@ -169,13 +197,17 @@ def _clock(seconds):
 def train(config, scenarios, total_steps=10000, horizon=128, epochs=4, seed=0,
           output="runs/train", clone_steps=0, clone_epochs=15, resume=None, device="cpu",
           critic="local", failure_reset=False, envs=8, separate_critic=True, lr=3e-4, minibatch=1024,
-          gamma=0.99, lam=0.95, clip=0.2, entropy=0.001, target_kl=0.03, dagger_rounds=0, clone_noise=0.3,
+          gamma=0.99, lam=0.95, clip=0.2, entropy=0.0, target_kl=0.03, dagger_rounds=0, clone_noise=0.3,
           init_log_std=None, critic_warmup=None, normalize_rewards=True, eval_every=25000, eval_seeds=5,
-          eval_scenarios=None, snapshot_every=0, threads=None, continue_run=False, stage=None):
+          eval_scenarios=None, snapshot_every=0, threads=None, continue_run=False, stage=None,
+          width=64, min_log_std=-3.0, bc_coef=1.0, bc_coef_end=0.1, bc_batch=1024, pipeline_version=None):
     """Train the shared drone policy and return the path of latest.pt.
 
     The output folder receives latest.pt (every update, for resuming), best.pt (highest selection
     score so far), best.json, evaluations.jsonl, training.jsonl, config.json and finished.json.
+    With clone_steps the run first clones the predictive controller (DART + DAgger) on its own
+    scenarios, also when resuming from an earlier stage, and keeps that teacher data as an
+    imitation loss inside PPO whose weight decays from bc_coef to bc_coef_end over the run.
     """
     if (total_steps < 1 or horizon < 2 or epochs < 1 or clone_steps < 0 or clone_epochs < 1 or envs < 1
             or minibatch < 1 or dagger_rounds < 0 or eval_seeds < 1):
@@ -197,7 +229,8 @@ def train(config, scenarios, total_steps=10000, horizon=128, epochs=4, seed=0,
              "target_kl": target_kl, "normalize_rewards": normalize_rewards, "failure_reset": failure_reset,
              "eval_every": eval_every, "eval_seeds": eval_seeds,
              "eval_scenarios": list(eval_scenarios or scenarios), "snapshot_every": snapshot_every,
-             "seed": seed, "stage": stage}
+             "seed": seed, "stage": stage, "bc_coef": bc_coef, "bc_coef_end": bc_coef_end, "bc_batch": bc_batch,
+             "pipeline_version": pipeline_version}
     central_critic = critic == "central"
     prior_steps = 0
     checkpoint = None
@@ -211,8 +244,6 @@ def train(config, scenarios, total_steps=10000, horizon=128, epochs=4, seed=0,
                              "network; start a fresh run")
         if Config(**checkpoint["config"]).to_dict() != config.to_dict():
             raise ValueError("Resume checkpoint has incompatible environment configuration")
-        if clone_steps:
-            raise ValueError("Do not repeat behavior cloning when resuming PPO")
         previous = checkpoint.get("training") or {}
         central_critic = bool(checkpoint.get("central_critic", False))
         separate_critic = bool(checkpoint.get("separate_critic", False))
@@ -237,8 +268,11 @@ def train(config, scenarios, total_steps=10000, horizon=128, epochs=4, seed=0,
         init_log_std = -1.6 if clone_steps else -1.0
     if critic_warmup is None:
         critic_warmup = 10 if clone_steps else 5 if resume and not same_folder else 0
+    network = {"width": width, "min_log_std": min_log_std}
+    if checkpoint:
+        network = checkpoint.get("network") or {"width": 64, "min_log_std": -5.0}
     model = ActorCritic(central_critic=central_critic, separate_critic=separate_critic,
-                        init_log_std=init_log_std).to(device)
+                        init_log_std=init_log_std, **network).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=hyper["lr"], eps=1e-5)
     if checkpoint:
         model.load_state_dict(checkpoint["model"])
@@ -253,8 +287,9 @@ def train(config, scenarios, total_steps=10000, horizon=128, epochs=4, seed=0,
     algorithm = ("parameter-sharing PPO; "
                  + ("centralized critic (MAPPO-style value)" if central_critic else "local critic (IPPO)")
                  + ("; separate critic network" if separate_critic else "; critic shares the actor encoder")
-                 + "; tanh Gaussian velocity actions")
-    settings = {**hyper, "config": config.to_dict(), "total_steps_this_run": total_steps,
+                 + "; tanh Gaussian velocity actions"
+                 + ("; decaying imitation loss on teacher data" if hyper["bc_coef"] > 0 else ""))
+    settings = {**hyper, "config": config.to_dict(), "network": model.network_spec(), "total_steps_this_run": total_steps,
                 "stage_start_environment_steps": run_start, "target_environment_steps": target_steps,
                 "clone_steps": clone_steps, "clone_epochs": clone_epochs, "dagger_rounds": dagger_rounds,
                 "clone_noise": clone_noise, "init_log_std": float(init_log_std),
@@ -269,7 +304,7 @@ def train(config, scenarios, total_steps=10000, horizon=128, epochs=4, seed=0,
                     "critic_warmup_updates"):
             settings[key] = previous.get(key, settings[key])
     (target / "config.json").write_text(json.dumps(settings, indent=2) + "\n")
-    status = "swarmflow-v3; attention set encoder"
+    status = "swarmflow-v4; attention set encoder"
     status += "; separate critic" if separate_critic else ""
     status += "; centralized critic" if central_critic else ""
     status += "; evaluate before claiming success"
@@ -286,6 +321,7 @@ def train(config, scenarios, total_steps=10000, horizon=128, epochs=4, seed=0,
         data = {"format": CHECKPOINT_FORMAT, "model": model.state_dict(), "optimizer": optimizer.state_dict(),
                 "config": config.to_dict(), "environment_steps": prior_steps + done_steps, "training": settings,
                 "central_critic": central_critic, "separate_critic": separate_critic,
+                "network": model.network_spec(),
                 "reward_scaler": scaler.state() if scaler else None, "status": status, **(extra or {})}
         path.parent.mkdir(parents=True, exist_ok=True)
         temp = path.with_name(path.name + ".tmp")
@@ -325,15 +361,26 @@ def train(config, scenarios, total_steps=10000, horizon=128, epochs=4, seed=0,
         return time.monotonic() - began
 
     workers = []
+    demo = None
     try:
         if clone_steps:
-            print(f"Behavior cloning: {dagger_rounds + 1} round(s) x {clone_steps:,} steps", flush=True)
-            for row in clone(model, config, hyper["scenarios"], clone_steps, clone_epochs, rng, device,
-                             dagger_rounds, clone_noise):
+            print(f"Behavior cloning on {', '.join(hyper['scenarios'])}: {dagger_rounds + 1} round(s) x "
+                  f"{clone_steps:,} steps", flush=True)
+
+            def report(row):
                 write(log, row)
                 print(f"[clone] round {row['round']} ({row['driver']}): {row['agent_samples']:,} samples, "
                       f"mse {row['final_epoch_mse']:.5f}, driver failures {row['driver_failures']}/"
                       f"{row['driver_episodes_finished']}", flush=True)
+
+            _, demo = clone(model, config, hyper["scenarios"], clone_steps, clone_epochs, rng, device,
+                            dagger_rounds, clone_noise, report)
+            if resume:
+                with torch.no_grad():
+                    model.log_std.clamp_(min=init_log_std)
+        elif continue_run and previous.get("clone_steps") and hyper["bc_coef"] > 0:
+            print("Rebuilding the teacher dataset for the imitation loss", flush=True)
+            demo = demonstrations(model, config, hyper["scenarios"], int(previous["clone_steps"]), rng, device)
         validate("start")
         last_validated = 0
         workers = [Worker(config, hyper["scenarios"], rng, hyper["failure_reset"]) for _ in range(n_envs)]
@@ -405,6 +452,7 @@ def train(config, scenarios, total_steps=10000, horizon=128, epochs=4, seed=0,
             warmup = updates < critic_warmup
             progress = min(1.0, (prior_steps + done_steps - run_start) / max(1, target_steps - run_start))
             lr_now = hyper["lr"] * (1.0 - 0.9 * progress)
+            bc_now = hyper["bc_coef"] + (hyper["bc_coef_end"] - hyper["bc_coef"]) * progress
             for group in optimizer.param_groups:
                 group["lr"] = lr_now
             loss_rows = []
@@ -429,10 +477,15 @@ def train(config, scenarios, total_steps=10000, horizon=128, epochs=4, seed=0,
                     policy_loss = -torch.minimum(ratio * adv_mb, ratio.clamp(1 - hyper["clip"], 1 + hyper["clip"])
                                                  * adv_mb).mean()
                     value_loss = 0.5 * (value - returns_t[index]).square().mean()
+                    bc_loss = torch.zeros((), device=device)
                     if warmup:
                         loss = 0.5 * value_loss
                     else:
                         loss = policy_loss + 0.5 * value_loss - hyper["entropy"] * entropy_values.mean()
+                        if demo is not None and bc_now > 0:
+                            ids = torch.as_tensor(rng.integers(0, len(demo[1]), hyper["bc_batch"]), device=device)
+                            bc_loss = F.mse_loss(model.act({k: v[ids] for k, v in demo[0].items()}), demo[1][ids])
+                            loss = loss + bc_now * bc_loss
                     if not torch.isfinite(loss):
                         raise RuntimeError("Non-finite PPO loss; training stopped without replacing checkpoint")
                     optimizer.zero_grad()
@@ -450,7 +503,7 @@ def train(config, scenarios, total_steps=10000, horizon=128, epochs=4, seed=0,
                     kl = float(((ratio - 1) - log_ratio).mean().detach().cpu())
                     kl_values.append(kl)
                     loss_rows.append((float(policy_loss.detach().cpu()), float(value_loss.detach().cpu()), kl,
-                                      float(entropy_values.mean().detach().cpu())))
+                                      float(entropy_values.mean().detach().cpu()), float(bc_loss.detach().cpu())))
                 epochs_done += 1
                 if not warmup and np.mean(kl_values) > hyper["target_kl"]:
                     break
@@ -470,16 +523,19 @@ def train(config, scenarios, total_steps=10000, horizon=128, epochs=4, seed=0,
                    "recent_slot_rmse_m": float(np.mean([s for _, s in recent])) if recent else None,
                    "mean_step_reward": float(np.mean(reward_store)), "policy_loss": float(losses[0]),
                    "value_loss": float(losses[1]), "approx_kl": float(losses[2]), "entropy": float(losses[3]),
+                   "bc_loss": float(losses[4]), "bc_coef": bc_now if demo is not None else 0.0,
                    "explained_variance": explained, "epochs_done": epochs_done, "lr": lr_now,
-                   "action_std": float(model.log_std.detach().clamp(-5, 1).exp().mean()),
+                   "action_std": float(model.log_std.detach().clamp(model.min_log_std, 1).exp().mean()),
                    "environment_steps_per_second": rate}
             write(log, row)
             failure = "-" if row["recent_failure_rate"] is None else f"{row['recent_failure_rate']:.0%}"
             rmse = "-" if row["recent_slot_rmse_m"] is None else f"{row['recent_slot_rmse_m']:.2f} m"
+            imitation = f"  imitation {row['bc_loss']:.4f}" if demo is not None and not warmup else ""
             print(f"[{row['phase']}] {done_steps:,}/{total_steps:,} ({done_steps / total_steps:.1%})  "
                   f"reward/step {row['mean_step_reward']:+.4f}  failures(last 100) {failure}  "
-                  f"slot RMSE(last 100) {rmse}  kl {row['approx_kl']:.4f}  value loss {row['value_loss']:.3f}  "
-                  f"{rate:,.0f} steps/s  ETA {_clock((total_steps - done_steps) / rate)}", flush=True)
+                  f"slot RMSE(last 100) {rmse}  kl {row['approx_kl']:.4f}  value loss {row['value_loss']:.3f}"
+                  f"{imitation}  std {row['action_std']:.3f}  {rate:,.0f} steps/s  "
+                  f"ETA {_clock((total_steps - done_steps) / rate)}", flush=True)
             save(target / "latest.pt")
             if next_snapshot is not None and prior_steps + done_steps >= next_snapshot:
                 save(target / "checkpoints" / f"step_{prior_steps + done_steps:09d}.pt")

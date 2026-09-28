@@ -9,7 +9,7 @@ TRAIN_OPTIONS = ("total_steps", "horizon", "epochs", "seed", "scenarios", "clone
                  "dagger_rounds", "clone_noise", "resume", "device", "output", "critic", "separate_critic",
                  "failure_reset", "envs", "lr", "minibatch", "entropy", "target_kl", "init_log_std",
                  "critic_warmup", "eval_every", "eval_seeds", "eval_scenarios", "snapshot_every", "threads",
-                 "continue_run")
+                 "continue_run", "width", "min_log_std", "bc_coef", "bc_coef_end")
 
 
 def main():
@@ -72,6 +72,10 @@ def main():
     training.add_argument("--entropy", type=float)
     training.add_argument("--target-kl", type=float)
     training.add_argument("--init-log-std", type=float)
+    training.add_argument("--min-log-std", type=float, help="Floor on the exploration noise (log standard deviation)")
+    training.add_argument("--width", type=int, help="Network width (64 = the original network; stages use 128)")
+    training.add_argument("--bc-coef", type=float, help="Imitation-loss weight at the start of the run")
+    training.add_argument("--bc-coef-end", type=float, help="Imitation-loss weight at the end of the run")
     training.add_argument("--critic-warmup", type=int, help="First PPO updates that train only the critic")
     training.add_argument("--eval-every", type=int, help="Validate (and maybe save best.pt) every N environment steps")
     training.add_argument("--eval-seeds", type=int, help="Selection episodes per scenario at each validation")
