@@ -4,13 +4,13 @@ import numpy as np
 
 from .baseline import PredictiveController, SlotController
 from .config import Config
-from .env import SwarmEnv
+from .env import RECOVERY_WINDOW_S, SwarmEnv
 from .scenarios import SCENARIOS
 
 # Acceptance targets from docs/research-plan.md.
 FORMATION_SCENARIOS = ("hold", "follow", "turn")
 FORMATION_RMSE_M = 0.35
-RECOVERY_LIMIT_S = 5.0
+RECOVERY_LIMIT_S = RECOVERY_WINDOW_S
 RECOVERY_RATE = 0.95
 
 

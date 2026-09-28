@@ -9,7 +9,8 @@ TRAIN_OPTIONS = ("total_steps", "horizon", "epochs", "seed", "scenarios", "clone
                  "dagger_rounds", "clone_noise", "resume", "device", "output", "critic", "separate_critic",
                  "failure_reset", "envs", "lr", "minibatch", "entropy", "target_kl", "init_log_std",
                  "critic_warmup", "eval_every", "eval_seeds", "eval_scenarios", "snapshot_every", "threads",
-                 "continue_run", "width", "min_log_std", "bc_coef", "bc_coef_end", "teacher_margins", "hard_weight")
+                 "continue_run", "width", "min_log_std", "bc_coef", "bc_coef_end", "teacher_margins", "hard_weight",
+                 "gap_features")
 
 
 def main():
@@ -79,7 +80,9 @@ def main():
     training.add_argument("--teacher-margins", type=float, nargs=2, metavar=("SOFT", "HARD"),
                           help="Teacher clearance margins in m while cloning (default 0.6 0.25; baseline uses 0.35 0.08)")
     training.add_argument("--hard-weight", type=float,
-                          help="How much more often near-object states are sampled for imitation (default 5)")
+                          help="How much more often near-object states are sampled for imitation (default 1: off)")
+    training.add_argument("--gap-features", dest="gap_features", action="store_true", default=None,
+                          help="Give the network each neighbour's and object's surface gap and closing speed")
     training.add_argument("--critic-warmup", type=int, help="First PPO updates that train only the critic")
     training.add_argument("--eval-every", type=int, help="Validate (and maybe save best.pt) every N environment steps")
     training.add_argument("--eval-seeds", type=int, help="Selection episodes per scenario at each validation")

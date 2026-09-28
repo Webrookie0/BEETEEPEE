@@ -95,6 +95,23 @@ def test_recovery_requires_each_original_slot_and_full_hold():
     assert env.events["event"]["recovery_s"] == pytest.approx(1.)
 
 
+def test_recovery_waits_for_a_second_object_inside_the_window():
+    env = SwarmEnv(Config(drones=2), "hold")
+    env.reset(seed=5)
+    env.obstacle_list = [Obstacle("first", np.array([30., 0, 3]), np.zeros(3), .5, 0, 1, True),
+                         Obstacle("second", np.array([-30., 0, 3]), np.zeros(3), .5, 1.5, 3, True),
+                         Obstacle("late", np.array([30., 20, 3]), np.zeros(3), .5, 20, 21, True)]
+    env.positions = env.slots().copy()
+    env.velocities[:] = 0
+    for t in np.arange(1, 4.51, .05):
+        env.time = round(float(t), 2)
+        env._update_recovery()
+    first, second = env.events["first"], env.events["second"]
+    assert "late" not in env.events
+    assert first["measured_from_s"] == pytest.approx(3.0) and first["recovery_s"] == pytest.approx(1.0)
+    assert second["measured_from_s"] == pytest.approx(3.0) and second["recovery_s"] == pytest.approx(1.0)
+
+
 def test_injection_validation_and_persistent_slots():
     env = SwarmEnv()
     env.reset(seed=7)

@@ -11,6 +11,7 @@ from .config import Config
 CHECKPOINT_FORMATS = ("swarmflow-v1", "swarmflow-v2", "swarmflow-v3", "swarmflow-v4")
 CHECKPOINT_FORMAT = "swarmflow-v4"
 OBSERVATION_KEYS = ("self", "neighbors", "obstacles")
+DRONE_RADIUS_M = Config().radius
 
 
 def stack_observations(observations):
@@ -27,15 +28,31 @@ def tensors(observations, device="cpu"):
 
 
 class SetEncoder(nn.Module):
-    def __init__(self, width=64):
+    """Masked attention pooling over neighbour or object rows.
+
+    With gap_features each row also gets its surface gap, a proximity term and its closing speed,
+    so decisions that switch at a few tens of centimetres of clearance do not have to be derived
+    from centre positions scaled by the 7 m sensor range.
+    """
+
+    def __init__(self, width=64, gap_features=False):
         super().__init__()
-        self.net = nn.Sequential(nn.Linear(7, width // 2), nn.Tanh(), nn.Linear(width // 2, width), nn.Tanh())
+        self.gap_features = gap_features
+        self.net = nn.Sequential(nn.Linear(10 if gap_features else 7, width // 2), nn.Tanh(),
+                                 nn.Linear(width // 2, width), nn.Tanh())
         self.query = nn.Parameter(torch.zeros(1, 1, width))
         self.attn = nn.MultiheadAttention(width, max(2, width // 32), batch_first=True)
 
     def forward(self, rows):
         mask = rows[..., 7]
         features = rows[..., :7] / rows.new_tensor([7, 7, 7, 6, 6, 6, 1.5])
+        if self.gap_features:
+            relative, velocity = rows[..., :3], rows[..., 3:6]
+            distance = relative.norm(dim=-1).clamp(min=1e-6)
+            gap = distance - rows[..., 6] - DRONE_RADIUS_M
+            closing = -(relative * velocity).sum(-1) / distance
+            features = torch.cat((features, torch.stack(
+                (gap / 2.0, torch.exp(-gap.clamp(min=0.0) / 0.3), closing / 3.0), dim=-1)), dim=-1)
         encoded = self.net(features)
         padding = mask == 0
         empty = padding.all(-1)
@@ -51,11 +68,11 @@ class SetEncoder(nn.Module):
 class Encoder(nn.Module):
     """Self MLP plus masked attention pooling over neighbors and obstacles, reduced to `width` features."""
 
-    def __init__(self, width=64):
+    def __init__(self, width=64, gap_features=False):
         super().__init__()
         self.own = nn.Sequential(nn.Linear(17, width), nn.Tanh())
-        self.neighbors = SetEncoder(width)
-        self.obstacles = SetEncoder(width)
+        self.neighbors = SetEncoder(width, gap_features)
+        self.obstacles = SetEncoder(width, gap_features)
         self.trunk = nn.Sequential(nn.Linear(3 * width, 2 * width), nn.Tanh(), nn.Linear(2 * width, width), nn.Tanh())
 
     def encode(self, observation):
@@ -71,23 +88,24 @@ class ActorCritic(Encoder):
     so value-loss gradients cannot overwrite the features the actor relies on."""
 
     def __init__(self, central_critic=False, separate_critic=False, init_log_std=-1.0, width=64,
-                 min_log_std=-5.0):
-        super().__init__(width)
+                 min_log_std=-5.0, gap_features=False):
+        super().__init__(width, gap_features)
         self.central_critic = central_critic
         self.separate_critic = separate_critic
         self.width = width
         self.min_log_std = min_log_std
+        self.gap_features = gap_features
         self.actor = nn.Linear(width, 3)
         self.critic = nn.Linear(width, 1)
         if central_critic:
             self.central = nn.Sequential(nn.Linear(width, width), nn.Tanh(), nn.Linear(width, 1))
         self.log_std = nn.Parameter(torch.full((3,), float(init_log_std)))
-        self.critic_encoder = Encoder(width) if separate_critic else None
+        self.critic_encoder = Encoder(width, gap_features) if separate_critic else None
         nn.init.orthogonal_(self.actor.weight, 0.01)
         nn.init.zeros_(self.actor.bias)
 
     def network_spec(self):
-        return {"width": self.width, "min_log_std": float(self.min_log_std)}
+        return {"width": self.width, "min_log_std": float(self.min_log_std), "gap_features": self.gap_features}
 
     def act_from_hidden(self, hidden):
         return self.actor(hidden)

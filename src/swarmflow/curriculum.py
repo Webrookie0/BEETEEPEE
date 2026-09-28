@@ -33,23 +33,25 @@ class Stage:
 # loss, attributes crashes to the drones involved and warns 1 m before obstacles.
 # Version 3: the teacher keeps 0.6 m / 0.25 m clearance while demonstrating (the baseline's 0.08 m
 # left no room for imitation error), the imitation loss stays at 0.5 or more, and slalom is dropped.
-PIPELINE_VERSION = 3
+# Version 4: teacher clearance 0.7 m / 0.3 m, and 1M PPO steps in stages 2-3 (was 2M): run 3's PPO never
+# beat the cloned start of those stages, and run 2's best came after 600k; the best checkpoint is kept anyway.
+PIPELINE_VERSION = 4
 
 STAGES = {
     1: Stage(1, "Formation keeping: hold, follow and turn with the target",
              ("hold", "follow", "turn"), 1_000_000, clone_steps=10_000, dagger_rounds=3),
     2: Stage(2, "Moving obstacles: crossing and head-on objects, keeping the stage 1 tasks",
-             ("hold", "follow", "turn", "crossing", "head_on"), 2_000_000, resume_from=1,
+             ("hold", "follow", "turn", "crossing", "head_on"), 1_000_000, resume_from=1,
              clone_steps=20_000, dagger_rounds=3, lr=1e-4, failure_reset=True),
     3: Stage(3, "Full benchmark: repeated crossings and wind gusts, keeping the earlier tasks",
-             SHOWCASE_SCENARIOS, 2_000_000, resume_from=2,
+             SHOWCASE_SCENARIOS, 1_000_000, resume_from=2,
              clone_steps=20_000, dagger_rounds=3, lr=1e-4, failure_reset=True),
 }
 
 # Shared PPO settings for every stage; 8 environments x 256 steps x 8 drones = 16,384 samples per update.
 COMMON = {"envs": 8, "horizon": 256, "epochs": 5, "minibatch": 2048, "eval_every": 100_000,
           "eval_seeds": 10, "snapshot_every": 500_000, "width": 128, "min_log_std": -3.0,
-          "entropy": 0.0, "bc_coef": 1.0, "bc_coef_end": 0.5, "teacher_margins": (0.6, 0.25), "hard_weight": 1.0,
+          "entropy": 0.0, "bc_coef": 1.0, "bc_coef_end": 0.5, "teacher_margins": (0.7, 0.3), "hard_weight": 1.0,
           "pipeline_version": PIPELINE_VERSION}
 
 

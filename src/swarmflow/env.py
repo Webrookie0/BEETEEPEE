@@ -13,6 +13,7 @@ REWARD_ERROR_CAP_M = 5.0
 FAILURE_PENALTY = 100.0
 OBSTACLE_MARGIN_M = 1.0
 OBSTACLE_WEIGHT = 3.0
+RECOVERY_WINDOW_S = 5.0
 
 
 class SwarmEnv(ParallelEnv):
@@ -284,8 +285,16 @@ class SwarmEnv(ParallelEnv):
             if not obj.recovery or self.time < obj.start:
                 continue
             event = self.events.setdefault(obj.name, {"start_s": obj.start, "clear_s": obj.end,
-                     "recovery_s": None, "settled_since_s": None})
+                     "measured_from_s": obj.end, "recovery_s": None, "settled_since_s": None})
             if self.time + 1e-9 < obj.end or event["recovery_s"] is not None:
+                continue
+            # A second object that arrives inside this event's recovery window disturbs the swarm again;
+            # the event is then measured from the moment that object has left as well.
+            overlapping = [o.end for o in self.obstacle_list if o is not obj and o.recovery
+                           and o.start <= self.time < o.end and o.start < event["measured_from_s"] + RECOVERY_WINDOW_S]
+            if overlapping:
+                event["measured_from_s"] = max(event["measured_from_s"], max(overlapping))
+                event["settled_since_s"] = None
                 continue
             if settled and not self.failure:
                 if event["settled_since_s"] is None:
@@ -293,7 +302,7 @@ class SwarmEnv(ParallelEnv):
             else:
                 event["settled_since_s"] = None
             if event["settled_since_s"] is not None and self.time - event["settled_since_s"] + 1e-9 >= c.recovery_hold:
-                event["recovery_s"] = max(0., self.time - obj.end)
+                event["recovery_s"] = max(0., self.time - event["measured_from_s"])
 
     def step(self, actions):
         if not self.agents:

@@ -1,12 +1,12 @@
 # How SwarmFlow trains its drone policy
 
-> **Current version: 3.** After the first full training run, stages 2 and 3 were fixed (**Part C**). After the second run, the teacher was made more cautious and slalom was removed (**Part D**, at the end). Where a later part differs from an earlier one, the later part is current. Compared with the first sections, the main differences are:
-> - cloning in every stage, with a teacher that keeps 0.25–0.6 m clearance;
+> **Current version: 4.** After the first full training run, stages 2 and 3 were fixed (**Part C**). After the second run, the teacher was made more cautious and slalom was removed (**Part D**). After the third run, the teacher margin was widened, recovery is counted after overlapping objects, and PPO in stages 2–3 was shortened (**Part E**, at the end). Where a later part differs from an earlier one, the later part is current. Compared with the first sections, the main differences are:
+> - cloning in every stage, with a teacher that keeps 0.3–0.7 m clearance;
 > - an imitation loss inside PPO whose weight goes from 1.0 to 0.5;
 > - an exploration floor, a per-drone crash penalty and a 1 m obstacle warning;
 > - a wider network;
 > - 7 scenarios instead of 8 (no slalom);
-> - a total time of about 6 h.
+> - 1M PPO steps in stages 2 and 3, for a total time of about 3.5 h.
 
 This document explains what the training does, why the old training finished in 2–5 minutes without learning, what was changed (and which research each change comes from), and how every part of the code works. It is written for preparing the presentation. The practical "which command do I run" steps are in [guide.md](guide.md).
 
@@ -978,3 +978,101 @@ A tiny end-to-end run (stage 1 → 2 → 3 → showcase → viewer report, 64 st
   - a longer stage 3;
   - more training seeds.
 - The cautious teacher makes slightly bigger detours, and its slowest recovery was 6.6 s. The "95% recovered within 5 s" check can therefore still be tight on double crossings.
+
+---
+---
+
+# Part E: training version 4 (after the third full run) — current
+
+## 32. What the third run (version 3) showed
+
+Run 3 was trained on a teammate's laptop; its results are in `models/previous-runs/run3-pipeline-v3/`.
+
+| Stage | Result |
+| --- | --- |
+| **1** | Still perfect: 0.997. |
+| **2** | Best score 0.968, but that was the **cloned start** (step 700,416, before any PPO). The 20 PPO validations after it swung between 0.74 and 0.96 and never beat it. |
+| **3** | The same: best 0.957 at the cloned start; PPO validations swung between 0.79 and 0.95. |
+| **Showcase** | 138/140 episodes without failure (version 2: 148/160) and 70/80 disturbances recovered within 5 s (version 2: 66/80). Test score 0.936 against the baseline's 0.970. Slot error 0.023 / 0.027 / 0.045 m (pass). Still **NOT LEARNED YET**, but the closest run so far. |
+
+## 33. Root cause, with the evidence
+
+1. **The recovery check measured the wrong thing on double crossings.**
+   - All 10 slow recoveries were the *first* object of a double crossing, with recovery times of 7.7–11.4 s.
+   - The second object enters 6–10 s after the first one starts, which is inside the first object's 5 s recovery window. The swarm is busy dodging object 2 while the clock for object 1 is still running.
+   - Even the hand-coded baseline scores only 76/80 (exactly 95%) on these test seeds, so this is a property of the metric, not of the student.
+   - When recovery is measured from the moment the overlapping object has also left, the baseline recovers 80/80 and run 3's model 78/80.
+2. **The two failures were grazes in head-on.** In both, drone 7 just touched the largest object (a tiny negative gap). The 0.6 / 0.25 m teacher keeps about 0.25 m there; at the hardest moment the student cuts it closer than its teacher.
+3. **PPO in stages 2 and 3 added nothing.** In both stages the best checkpoint was the cloned start, so 2 × 2M PPO steps (about 2 h 10 min) improved nothing. Crashes are rare (about 5% of training episodes in stage 2 and 3% in stage 3), so they hardly move the averaged PPO advantage over 16,384 samples, while the reward noise moves the policy away from the teacher. Wołczyk et al. (2024) describe the same effect: fine-tuning a pre-trained policy with RL can first forget what it already knew.
+
+## 34. The experiments that decided the fix (no full training needed)
+
+To avoid tuning on the test set, every decision used **development seeds 1000–1019** (7 scenarios × 20 = 140 episodes). The test seeds 100000+ were not used.
+
+**Is the development set a fair stand-in for the test?** Run 3's showcase model on it scores 0.947, has 1 head-on failure and recovers 70/80 within 5 s. That is the same pattern as on the test (2 head-on failures, 70/80).
+
+**Is the teacher jerky? (MPPI-style smoothing, Williams et al. 2017.)** The teacher was run alone, with its candidate commands averaged with temperature T instead of taking the single best one:
+
+| Teacher temperature T | Command change per step near objects | Double crossing recovered within 5 s | Failures |
+| --- | --- | --- | --- |
+| **0 (the teacher as it is)** | 0.035 m/s | **18/20** | 0 |
+| 0.3 | 0.022 m/s | 16/20 | 0 |
+| 1.0 | 0.027 m/s | 15/20 | 0 |
+
+The teacher's commands are already smooth (0.035 m/s per step), and averaging made recovery slower. So this idea was rejected; the temperature option stays in `baseline.PredictiveController` but is off.
+
+**Student after imitation only.** Each version repeated stage 2 and stage 3 cloning + DAgger (3 rounds, 20,000 steps each) from run 3's stage 1 model, and was then tested on the development seeds:
+
+| Version | Score | Failures | Recovered within 5 s (old rule) | Lowest clearance, head-on / double crossing | Teacher failures in the last stage 3 DAgger round |
+| --- | --- | --- | --- | --- | --- |
+| Run 3's showcase model (reference) | 0.947 | 1/140 | 70/80 | −0.003 / +0.047 m | – |
+| R0: run 3's recipe again (teacher 0.6 / 0.25) | 0.921 | 3/140 | 67/80 | −0.018 / −0.020 m | 6/44 |
+| **R2: teacher 0.7 / 0.3** | **0.941** | **1/140** | 68/80 | **+0.113** / −0.021 m | 0/41 |
+| R3: teacher 0.6 / 0.25 + gap features | 0.898 | 5/140 | 66/80 | −0.015 / −0.009 m | 0/41 |
+
+"Gap features" gave the network three extra numbers per object and neighbour: the surface gap, a proximity term and the closing speed. The idea came from the distance-based obstacle input in Huang et al. (2024).
+
+What the experiments show:
+
+- **The 0.7 / 0.3 teacher is the fix for head-on.** The lowest head-on clearance went from −0.018 m (contact) to +0.113 m. Its only failure is drone 5 grazing the second object of a double crossing on seed 1010, where the teacher itself keeps 0.356 m. This is the idea of constraint tightening in robust MPC (Mayne et al. 2005): plan with a larger margin than you need, so that the tracking error still fits inside it.
+- **The same recipe gives 1–3 failures from run to run** (R0 against run 3's model). A single run cannot promise zero failures.
+- **Gap features made it worse** (5 failures), so they are off. The option stays (`--gap-features`).
+- **Few teacher failures during DAgger do not guarantee a good test** (R3 had 0/41 and the most test failures). Only the evaluation decides.
+
+**Final check with the new recovery rule** (development seeds, the version 4 recipe):
+
+| Controller | Score | Failures | Recovered within 5 s | Slot error check |
+| --- | --- | --- | --- | --- |
+| R2 (the version 4 recipe) | 0.941 | 1/140 | 77/80 (96%, pass) | pass |
+| Hand-coded baseline | 0.971 | 0/140 | 80/80 (pass) | pass |
+
+## 35. What version 4 changes
+
+| # | Change | Why | Code |
+| --- | --- | --- | --- |
+| 1 | **Recovery is counted after overlapping objects.** If another object enters within 5 s of an object's exit, before the swarm has recovered, the event is measured from the moment that object has left too (`measured_from_s` in the reports). The same rule applies to the baseline and the learned model. | The old rule charged the dodge of object 2 to object 1 (section 33). This is the usual meaning of settling time: measured after the last disturbance ends. | `env._update_recovery` |
+| 2 | While demonstrating, the teacher keeps a **0.7 m soft / 0.3 m hard** clearance margin (was 0.6 / 0.25). The baseline you compare against keeps its own 0.35 / 0.08, unchanged. | Experiment R2: head-on contact disappeared. | `curriculum.COMMON` (`teacher_margins`) |
+| 3 | Stages 2 and 3 run **1,000,000 PPO steps** (was 2,000,000). The best of the cloned start and every PPO checkpoint is still kept. | In run 3, PPO never beat the cloned start of stages 2–3. In run 2, whose cloned start was weaker, stage 2's best came after 600,000 PPO steps, so 1M keeps a safety margin. The total time drops from about 5–6 h to about 3.5 h. | `curriculum.STAGES` |
+| 4 | Gap features are available but **off**. The checkpoint records whether they were used, so old and new models both load. | They hurt in experiment R3. | `policy.SetEncoder(gap_features=...)`, `train --gap-features` |
+| 5 | The teacher's MPPI temperature is available but **off**. | It slowed recovery. | `baseline.PredictiveController(temperature=...)` |
+| 6 | Pipeline version 4: version-3 folders are moved to `models/<name>-old-<date>` automatically. | Old and new runs never mix. | `curriculum.PIPELINE_VERSION` |
+
+Everything else from Parts C and D stays: cloning + DAgger in every stage, the imitation loss inside PPO (1.0 → 0.5), the exploration floor, per-drone crash penalties, the 1 m warning, crash replay in stages 2–3, learning rate 1×10⁻⁴ in stages 2–3, the 128-wide network and the 7 scenarios.
+
+All 40 unit tests pass. A tiny end-to-end version 4 run (stage 1 → 2 → 3 → showcase, with the 7 test scenarios) finishes in 52 s, so a long run will not stop on a code error.
+
+## 36. What to expect, and the remaining risk
+
+- **Result:** close to experiment R2, so about 0–1 failures in 140 test episodes, recovery around 96% and slot error well within the limit. It can pass all three checks, or miss the zero-failure check by a single graze.
+- **`[clone]` lines of stage 3:** the last DAgger round should have few teacher failures (R2: 0/41).
+- **`[eval:start]` of stages 2 and 3:** about 0.94–0.97. Later PPO validations may not beat it; that is expected, and `best.pt` keeps the best one.
+- **Time:** about 3–3.5 h (run 3 measured about 550 PPO steps per second).
+- **If one graze remains:** it is not a code error. The next steps are more training seeds (`make train-full-multi`; the showcase picks the best seed) or more DAgger rounds. For the report, show the learned-vs-baseline table as it is: the learned policy is within a few percent of the hand-coded controller it learned from.
+
+### Sources for Part E
+
+- Mayne, Seron & Raković, *Robust Model Predictive Control of Constrained Linear Systems with Bounded Disturbances* (Automatica 2005): constraint tightening. <https://doi.org/10.1016/j.automatica.2004.08.019>
+- Williams et al., *Information Theoretic MPC for Model-Based Reinforcement Learning* (ICRA 2017): MPPI, the averaged-command teacher we tested. <https://ieeexplore.ieee.org/document/7989202>
+- Wołczyk et al., *Fine-tuning Reinforcement Learning Models is Secretly a Forgetting Mitigation Problem* (ICML 2024): why RL fine-tuning of a pre-trained policy can lose what it knew. <https://arxiv.org/abs/2402.02868>
+- Ross, Gordon & Bagnell, *DAgger* (AISTATS 2011): <https://arxiv.org/abs/1011.0686>
+- Huang et al., *Collision Avoidance and Navigation for a Quadrotor Swarm Using End-to-end Deep Reinforcement Learning* (ICRA 2024): <https://arxiv.org/abs/2309.13285>

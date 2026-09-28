@@ -232,7 +232,7 @@ def train(config, scenarios, total_steps=10000, horizon=128, epochs=4, seed=0,
           init_log_std=None, critic_warmup=None, normalize_rewards=True, eval_every=25000, eval_seeds=5,
           eval_scenarios=None, snapshot_every=0, threads=None, continue_run=False, stage=None,
           width=64, min_log_std=-3.0, bc_coef=1.0, bc_coef_end=0.5, bc_batch=1024, pipeline_version=None,
-          teacher_margins=(0.6, 0.25), hard_weight=1.0):
+          teacher_margins=(0.7, 0.3), hard_weight=1.0, gap_features=False):
     """Train the shared drone policy and return the path of latest.pt.
 
     The output folder receives latest.pt (every update, for resuming), best.pt (highest selection
@@ -301,7 +301,7 @@ def train(config, scenarios, total_steps=10000, horizon=128, epochs=4, seed=0,
         init_log_std = -1.6 if clone_steps else -1.0
     if critic_warmup is None:
         critic_warmup = 10 if clone_steps else 5 if resume and not same_folder else 0
-    network = {"width": width, "min_log_std": min_log_std}
+    network = {"width": width, "min_log_std": min_log_std, "gap_features": gap_features}
     if checkpoint:
         network = checkpoint.get("network") or {"width": 64, "min_log_std": -5.0}
     model = ActorCritic(central_critic=central_critic, separate_critic=separate_critic,

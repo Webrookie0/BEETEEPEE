@@ -7,9 +7,10 @@ from .geometry import limit_norm
 class PredictiveController:
     """Sampled local velocity planning; not ORCA and not a safety guarantee."""
 
-    def __init__(self, config, soft_margin=0.35, hard_margin=0.08):
+    def __init__(self, config, soft_margin=0.35, hard_margin=0.08, temperature=0.0):
         self.config = config
         self.soft_margin, self.hard_margin = soft_margin, hard_margin
+        self.temperature = temperature
         directions = np.array([v for v in itertools.product((-1, 0, 1), repeat=3) if any(v)], dtype=float)
         directions /= np.linalg.norm(directions, axis=1, keepdims=True)
         self.candidates = np.concatenate([directions * speed for speed in (0.8, 1.6, config.max_speed)])
@@ -47,7 +48,13 @@ class PredictiveController:
         altitude = own[15] + positions[:, :, 2]
         cost += 5000 * (np.maximum(0, 0.6 - altitude).max(axis=1) ** 2 +
                         np.maximum(0, altitude - 9.4).max(axis=1) ** 2)
-        return (candidates[int(np.argmin(cost))] / c.max_speed).astype(np.float32)
+        if self.temperature > 0:
+            # MPPI-style blend of the low-cost candidates: a continuous command that a network can imitate.
+            weights = np.exp(-(cost - cost.min()) / self.temperature)
+            best = limit_norm(weights @ candidates / weights.sum(), c.max_speed)
+        else:
+            best = candidates[int(np.argmin(cost))]
+        return (best / c.max_speed).astype(np.float32)
 
     def __call__(self, observations):
         return {agent: self.action(obs) for agent, obs in observations.items()}

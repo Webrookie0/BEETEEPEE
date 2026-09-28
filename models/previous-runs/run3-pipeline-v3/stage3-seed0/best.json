@@ -1,0 +1,147 @@
+{
+  "type": "evaluation",
+  "reason": "start",
+  "environment_steps": 700416,
+  "score": 0.9568970444424305,
+  "best": true,
+  "success_rate": 1.0,
+  "mean_slot_rmse_m": 0.17241182223027787,
+  "events": 40,
+  "recovered_events": 40,
+  "scenarios": [
+    "hold",
+    "follow",
+    "crossing",
+    "head_on",
+    "double_crossing",
+    "turn",
+    "gust"
+  ],
+  "seeds": [
+    5000,
+    5009
+  ],
+  "seconds": 25.0,
+  "summary": {
+    "hold": {
+      "episodes": 10,
+      "failures": 0,
+      "collisions": 0,
+      "success_rate": 1.0,
+      "mean_slot_rmse_m": 0.023357587719621632,
+      "slot_rmse_std_m": 0.0009412258504979314,
+      "slot_rmse_ci95_m": {
+        "low": 0.022774209893501925,
+        "high": 0.02394096554574134
+      },
+      "min_surface_clearance_m": 0.7646477584719035,
+      "events": 0,
+      "recovered_events": 0,
+      "mean_recovery_s_conditional": null,
+      "max_recovery_s_conditional": null
+    },
+    "follow": {
+      "episodes": 10,
+      "failures": 0,
+      "collisions": 0,
+      "success_rate": 1.0,
+      "mean_slot_rmse_m": 0.026641832427265904,
+      "slot_rmse_std_m": 0.0008407001981260938,
+      "slot_rmse_ci95_m": {
+        "low": 0.02612076104600098,
+        "high": 0.027162903808530828
+      },
+      "min_surface_clearance_m": 0.7646477584719035,
+      "events": 0,
+      "recovered_events": 0,
+      "mean_recovery_s_conditional": null,
+      "max_recovery_s_conditional": null
+    },
+    "crossing": {
+      "episodes": 10,
+      "failures": 0,
+      "collisions": 0,
+      "success_rate": 1.0,
+      "mean_slot_rmse_m": 0.2604701657641601,
+      "slot_rmse_std_m": 0.03281372958799626,
+      "slot_rmse_ci95_m": {
+        "low": 0.24013200545566646,
+        "high": 0.2808083260726537
+      },
+      "min_surface_clearance_m": 0.22253807761842637,
+      "events": 10,
+      "recovered_events": 10,
+      "mean_recovery_s_conditional": 1.6119749278571915,
+      "max_recovery_s_conditional": 2.536950873390216
+    },
+    "head_on": {
+      "episodes": 10,
+      "failures": 0,
+      "collisions": 0,
+      "success_rate": 1.0,
+      "mean_slot_rmse_m": 0.29416024360108384,
+      "slot_rmse_std_m": 0.03647366237601441,
+      "slot_rmse_ci95_m": {
+        "low": 0.27155363344870975,
+        "high": 0.3167668537534579
+      },
+      "min_surface_clearance_m": 0.04882847296360937,
+      "events": 10,
+      "recovered_events": 10,
+      "mean_recovery_s_conditional": 2.4131262237366258,
+      "max_recovery_s_conditional": 4.1574259240533635
+    },
+    "double_crossing": {
+      "episodes": 10,
+      "failures": 0,
+      "collisions": 0,
+      "success_rate": 1.0,
+      "mean_slot_rmse_m": 0.38185527581289846,
+      "slot_rmse_std_m": 0.02989018628120027,
+      "slot_rmse_ci95_m": {
+        "low": 0.3633291464191775,
+        "high": 0.4003814052066194
+      },
+      "min_surface_clearance_m": 0.0596436968405758,
+      "events": 20,
+      "recovered_events": 20,
+      "mean_recovery_s_conditional": 2.9628271124981183,
+      "max_recovery_s_conditional": 9.93115207739697
+    },
+    "turn": {
+      "episodes": 10,
+      "failures": 0,
+      "collisions": 0,
+      "success_rate": 1.0,
+      "mean_slot_rmse_m": 0.04442468076776268,
+      "slot_rmse_std_m": 0.0005693498960669091,
+      "slot_rmse_ci95_m": {
+        "low": 0.044071794046160975,
+        "high": 0.04477756748936439
+      },
+      "min_surface_clearance_m": 0.7646477584719035,
+      "events": 0,
+      "recovered_events": 0,
+      "mean_recovery_s_conditional": null,
+      "max_recovery_s_conditional": null
+    },
+    "gust": {
+      "episodes": 10,
+      "failures": 0,
+      "collisions": 0,
+      "success_rate": 1.0,
+      "mean_slot_rmse_m": 0.17597296951915226,
+      "slot_rmse_std_m": 0.0001308353783034443,
+      "slot_rmse_ci95_m": {
+        "low": 0.1758918769115344,
+        "high": 0.1760540621267701
+      },
+      "min_surface_clearance_m": 0.7646477584719035,
+      "events": 0,
+      "recovered_events": 0,
+      "mean_recovery_s_conditional": null,
+      "max_recovery_s_conditional": null
+    }
+  },
+  "checkpoint": "best.pt"
+}

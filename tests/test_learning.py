@@ -110,7 +110,7 @@ def test_resumed_stage_clones_its_scenarios_and_keeps_an_imitation_loss(tmp_path
     assert all(row["bc_coef"] > 0 and row["bc_loss"] >= 0 for row in ppo)
     assert ppo[0]["action_std"] > 0.19
     resumed = LearnedController(tmp_path / "b" / "latest.pt")
-    assert resumed.metadata["network"] == {"width": 32, "min_log_std": -3.0}
+    assert resumed.metadata["network"] == {"width": 32, "min_log_std": -3.0, "gap_features": False}
     assert resumed.model.width == 32
 
 
@@ -124,6 +124,27 @@ def test_continue_rebuilds_teacher_data_for_the_imitation_loss(tmp_path):
     train(config, ["hold"], total_steps=1, output=tmp_path, continue_run=True)
     rows = [json.loads(row) for row in (tmp_path / "training.jsonl").read_text().splitlines()]
     assert rows[-1]["type"] == "ppo" and rows[-1]["environment_steps"] == 16 and rows[-1]["bc_coef"] > 0
+
+
+def test_gap_features_keep_the_encoder_order_invariant_and_round_trip(tmp_path):
+    torch.manual_seed(0)
+    env = SwarmEnv(Config(drones=4), "head_on")
+    env.reset(seed=1)
+    env.inject()
+    batch = tensors(stack_observations(env.last_observations))
+    model = ActorCritic(separate_critic=True, width=32, gap_features=True).eval()
+    with torch.no_grad():
+        reference, _ = model(batch)
+        permuted = {key: value.clone() for key, value in batch.items()}
+        for key in ("neighbors", "obstacles"):
+            permuted[key] = permuted[key].flip(1)
+            permuted[key][..., :7][permuted[key][..., -1] == 0] = 1000
+        actual, _ = model(permuted)
+    torch.testing.assert_close(reference, actual)
+    config = Config(drones=4, duration=.2)
+    latest = train(config, ["hold"], total_steps=8, horizon=8, epochs=1, output=tmp_path, envs=1, eval_seeds=1,
+                   width=32, gap_features=True)
+    assert LearnedController(latest).model.gap_features is True
 
 
 def test_crash_penalty_goes_to_the_drones_involved():

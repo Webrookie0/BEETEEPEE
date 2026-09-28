@@ -1,0 +1,11 @@
+No trained policy found under models/; showing the predictive baseline only
+SwarmFlow: http://127.0.0.1:8765 (Ctrl+C to stop)
+Controller: predictive baseline
+Following models/: the viewer switches to each new best model automatically
+Viewer now uses models/stage1-seed0/best.pt
+Viewer now uses models/stage1-seed0/best.pt
+Viewer now uses models/stage1-seed0/best.pt
+Viewer now uses models/stage1-seed0/best.pt
+Viewer now uses models/stage2-seed0/best.pt
+Viewer now uses models/stage3-seed0/best.pt
+Viewer now uses models/showcase/best.pt

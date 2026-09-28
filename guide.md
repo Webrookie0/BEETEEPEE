@@ -22,7 +22,7 @@ There are two ways to start the full training. Both run the same training and st
 | `make training` | Full training in the terminal: stage 1 → 2 → 3, then the showcase test. | `.venv/bin/python -m swarmflow pipeline` |
 | `make run train` (same as `make run-train`) | The same training, **plus the viewer** in your browser. It shows live progress, flies the best model found so far, and switches to the final best model at the end. | `.venv/bin/python -m swarmflow pipeline --view` |
 
-On a Mac, put `caffeinate -i` in front so the laptop does not sleep during the roughly 6-hour run:
+On a Mac, put `caffeinate -i` in front so the laptop does not sleep during the roughly 3.5-hour run:
 
 ```sh
 caffeinate -i make run train
@@ -36,8 +36,8 @@ caffeinate -i make run train
 2. **Stage 2, moving obstacles** (adds crossing and head-on objects), saved to `models/stage2-seed0/`:
    - starts from stage 1's `best.pt`;
    - behavior cloning + DAgger on these obstacle scenarios, so the network learns avoidance from the teacher;
-   - 2,000,000 PPO steps with an imitation loss that fades out over the stage.
-3. **Stage 3, the full benchmark** (adds repeated crossings and wind), saved to `models/stage3-seed0/`: the same recipe, starting from stage 2's `best.pt`, 2,000,000 PPO steps. Slalom, with static spheres on the formation slots, is not part of the learned-policy benchmark; see [training.md](training.md) Part D.
+   - 1,000,000 PPO steps with an imitation loss (fine-tuning; the best of the cloned start and the PPO checkpoints is kept).
+3. **Stage 3, the full benchmark** (adds repeated crossings and wind), saved to `models/stage3-seed0/`: the same recipe, starting from stage 2's `best.pt`, 1,000,000 PPO steps. Slalom, with static spheres on the formation slots, is not part of the learned-policy benchmark; see [training.md](training.md) Part D.
 4. **Showcase**:
    - picks the best final model (across all trained seeds);
    - tests it against the hand-coded baseline on 7 scenarios × 20 seeds it has never seen;
@@ -60,17 +60,23 @@ Every 100,000 steps the model is validated. Whenever it beats its previous best 
 
   Press **Run** to watch them. After the pipeline finishes, the page shows the final verdict and the learned-vs-baseline table, and the viewer keeps running until you press Ctrl+C.
 
-### Time on this Mac (measured throughput)
+### Time (measured in run 3: about 550 PPO steps per second)
 
 | Part | Time |
 | --- | --- |
-| Stage 1 (cloning ~8 min + 1M PPO steps) | about 1 h |
-| Stage 2 (cloning on obstacle scenarios ~15 min + 2M PPO steps) | about 2 h |
-| Stage 3 (the same on all 7 scenarios) | about 2 h |
+| Stage 1 (cloning ~8 min + 1M PPO steps) | about 40 min |
+| Stage 2 (cloning + DAgger on obstacle scenarios ~30 min + 1M PPO steps) | about 1 h 5 min |
+| Stage 3 (the same on all 7 scenarios) | about 1 h 10 min |
 | Showcase test | about 10 min |
-| **Total** | **about 6 h** |
+| **Total** | **about 3–3.5 h** |
 
-This is version 3 of the training. [training.md](training.md) Part C covers the fixes after the first full run, and Part D covers the second run: a more cautious teacher, a stronger imitation loss, and slalom removed. When you start it, the older runs' folders are moved to `models/<name>-old-<date>` automatically, and everything trains again. Nothing is deleted.
+This is version 4 of the training. The earlier versions are explained in [training.md](training.md):
+
+- **Part C:** the fixes after the first run.
+- **Part D:** after the second run, a cautious teacher and slalom removed.
+- **Part E:** after the third run, a teacher margin of 0.7 / 0.3 m, recovery counted after overlapping objects, and 1M PPO steps in stages 2–3 (was 2M).
+
+When you start it, the older runs' folders are moved to `models/<name>-old-<date>` automatically, and everything trains again. Nothing is deleted.
 
 ### If it stops
 
@@ -82,7 +88,7 @@ Ctrl+C, a crash or the laptop sleeping loses nothing. Run the **same command aga
 ### More seeds (recommended for the report)
 
 ```sh
-caffeinate -i make train-full-multi        # seeds 0 1 2, about 18 h  (python -m swarmflow pipeline --seeds 0 1 2)
+caffeinate -i make train-full-multi        # seeds 0 1 2, about 10 h  (python -m swarmflow pipeline --seeds 0 1 2)
 make training SEED=1                       # or add one seed at a time
 ```
 

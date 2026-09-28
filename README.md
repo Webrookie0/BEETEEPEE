@@ -23,7 +23,7 @@ Then open [http://127.0.0.1:8765](http://127.0.0.1:8765). The viewer automatical
 **To train the model yourself, follow [guide.md](guide.md)**; the whole curriculum is one command:
 
 ```sh
-caffeinate -i make training        # stage 1 -> 2 -> 3 (about 6 h on this Mac), then the held-out showcase test
+caffeinate -i make training        # stage 1 -> 2 -> 3 (about 3.5 h), then the held-out showcase test
 caffeinate -i make run train       # the same, with the viewer open: live progress, then the best model
 make run                           # viewer with the best model and its "Did the model learn correctly?" panel
 ```
