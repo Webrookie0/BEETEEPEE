@@ -1,0 +1,175 @@
+es(last 100) 39%  slot RMSE(last 100) 0.43 m  kl 0.0035  value loss 1.798  648 steps/s  ETA 0:06:14
+[ppo] 1,759,232/2,000,000 (88.0%)  reward/step -0.0564  failures(last 100) 39%  slot RMSE(last 100) 0.43 m  kl 0.0034  value loss 0.375  648 steps/s  ETA 0:06:11
+[ppo] 1,761,280/2,000,000 (88.1%)  reward/step -0.1576  failures(last 100) 39%  slot RMSE(last 100) 0.44 m  kl 0.0028  value loss 2.037  648 steps/s  ETA 0:06:08
+[ppo] 1,763,328/2,000,000 (88.2%)  reward/step -0.0577  failures(last 100) 39%  slot RMSE(last 100) 0.44 m  kl 0.0028  value loss 0.386  648 steps/s  ETA 0:06:05
+[ppo] 1,765,376/2,000,000 (88.3%)  reward/step +0.0415  failures(last 100) 36%  slot RMSE(last 100) 0.43 m  kl 0.0030  value loss 0.060  648 steps/s  ETA 0:06:01
+[ppo] 1,767,424/2,000,000 (88.4%)  reward/step -0.0087  failures(last 100) 36%  slot RMSE(last 100) 0.43 m  kl 0.0041  value loss 1.089  648 steps/s  ETA 0:05:58
+[ppo] 1,769,472/2,000,000 (88.5%)  reward/step -0.1563  failures(last 100) 37%  slot RMSE(last 100) 0.44 m  kl 0.0034  value loss 4.316  648 steps/s  ETA 0:05:55
+[ppo] 1,771,520/2,000,000 (88.6%)  reward/step -0.1078  failures(last 100) 38%  slot RMSE(last 100) 0.45 m  kl 0.0028  value loss 2.066  648 steps/s  ETA 0:05:52
+[ppo] 1,773,568/2,000,000 (88.7%)  reward/step -0.0556  failures(last 100) 38%  slot RMSE(last 100) 0.45 m  kl 0.0031  value loss 1.242  648 steps/s  ETA 0:05:49
+[ppo] 1,775,616/2,000,000 (88.8%)  reward/step -0.1090  failures(last 100) 39%  slot RMSE(last 100) 0.45 m  kl 0.0031  value loss 1.933  649 steps/s  ETA 0:05:45
+[ppo] 1,777,664/2,000,000 (88.9%)  reward/step +0.0398  failures(last 100) 37%  slot RMSE(last 100) 0.45 m  kl 0.0040  value loss 0.381  649 steps/s  ETA 0:05:42
+[ppo] 1,779,712/2,000,000 (89.0%)  reward/step -0.1060  failures(last 100) 37%  slot RMSE(last 100) 0.46 m  kl 0.0032  value loss 0.471  649 steps/s  ETA 0:05:39
+[ppo] 1,781,760/2,000,000 (89.1%)  reward/step -0.0101  failures(last 100) 36%  slot RMSE(last 100) 0.46 m  kl 0.0027  value loss 0.658  649 steps/s  ETA 0:05:36
+[ppo] 1,783,808/2,000,000 (89.2%)  reward/step -0.1601  failures(last 100) 36%  slot RMSE(last 100) 0.47 m  kl 0.0023  value loss 1.155  649 steps/s  ETA 0:05:33
+[ppo] 1,785,856/2,000,000 (89.3%)  reward/step +0.0424  failures(last 100) 36%  slot RMSE(last 100) 0.47 m  kl 0.0025  value loss 0.004  649 steps/s  ETA 0:05:29
+[ppo] 1,787,904/2,000,000 (89.4%)  reward/step -0.0590  failures(last 100) 36%  slot RMSE(last 100) 0.47 m  kl 0.0024  value loss 1.328  649 steps/s  ETA 0:05:26
+[ppo] 1,789,952/2,000,000 (89.5%)  reward/step -0.1097  failures(last 100) 38%  slot RMSE(last 100) 0.48 m  kl 0.0046  value loss 0.730  649 steps/s  ETA 0:05:23
+[ppo] 1,792,000/2,000,000 (89.6%)  reward/step +0.0390  failures(last 100) 36%  slot RMSE(last 100) 0.48 m  kl 0.0030  value loss 0.384  649 steps/s  ETA 0:05:20
+[ppo] 1,794,048/2,000,000 (89.7%)  reward/step -0.0602  failures(last 100) 35%  slot RMSE(last 100) 0.48 m  kl 0.0040  value loss 0.239  649 steps/s  ETA 0:05:17
+[ppo] 1,796,096/2,000,000 (89.8%)  reward/step -0.0602  failures(last 100) 34%  slot RMSE(last 100) 0.48 m  kl 0.0030  value loss 0.235  649 steps/s  ETA 0:05:13
+[ppo] 1,798,144/2,000,000 (89.9%)  reward/step -0.2089  failures(last 100) 35%  slot RMSE(last 100) 0.49 m  kl 0.0035  value loss 0.801  650 steps/s  ETA 0:05:10
+[ppo] 1,800,192/2,000,000 (90.0%)  reward/step -0.2091  failures(last 100) 39%  slot RMSE(last 100) 0.50 m  kl 0.0039  value loss 1.702  650 steps/s  ETA 0:05:07
+[eval:periodic] steps 2,201,600  score 0.227 (best 0.788)  success 60%  slot RMSE 0.492 m  recovered 0/10
+[ppo] 1,802,240/2,000,000 (90.1%)  reward/step +0.0371  failures(last 100) 39%  slot RMSE(last 100) 0.50 m  kl 0.0038  value loss 0.695  650 steps/s  ETA 0:05:04
+[ppo] 1,804,288/2,000,000 (90.2%)  reward/step -0.0087  failures(last 100) 37%  slot RMSE(last 100) 0.50 m  kl 0.0020  value loss 0.109  650 steps/s  ETA 0:05:01
+[ppo] 1,806,336/2,000,000 (90.3%)  reward/step -0.1070  failures(last 100) 36%  slot RMSE(last 100) 0.50 m  kl 0.0032  value loss 2.002  650 steps/s  ETA 0:04:57
+[ppo] 1,808,384/2,000,000 (90.4%)  reward/step -0.2584  failures(last 100) 39%  slot RMSE(last 100) 0.51 m  kl 0.0039  value loss 1.796  650 steps/s  ETA 0:04:54
+[ppo] 1,810,432/2,000,000 (90.5%)  reward/step -0.1571  failures(last 100) 41%  slot RMSE(last 100) 0.52 m  kl 0.0019  value loss 0.388  650 steps/s  ETA 0:04:51
+[ppo] 1,812,480/2,000,000 (90.6%)  reward/step -0.0084  failures(last 100) 40%  slot RMSE(last 100) 0.51 m  kl 0.0027  value loss 0.430  650 steps/s  ETA 0:04:48
+[ppo] 1,814,528/2,000,000 (90.7%)  reward/step -0.1572  failures(last 100) 42%  slot RMSE(last 100) 0.52 m  kl 0.0030  value loss 1.293  650 steps/s  ETA 0:04:45
+[ppo] 1,816,576/2,000,000 (90.8%)  reward/step -0.0061  failures(last 100) 41%  slot RMSE(last 100) 0.51 m  kl 0.0041  value loss 0.682  650 steps/s  ETA 0:04:42
+[ppo] 1,818,624/2,000,000 (90.9%)  reward/step -0.0548  failures(last 100) 41%  slot RMSE(last 100) 0.51 m  kl 0.0028  value loss 0.555  650 steps/s  ETA 0:04:38
+[ppo] 1,820,672/2,000,000 (91.0%)  reward/step -0.1074  failures(last 100) 43%  slot RMSE(last 100) 0.51 m  kl 0.0016  value loss 1.346  651 steps/s  ETA 0:04:35
+[ppo] 1,822,720/2,000,000 (91.1%)  reward/step -0.0573  failures(last 100) 41%  slot RMSE(last 100) 0.50 m  kl 0.0031  value loss 0.222  651 steps/s  ETA 0:04:32
+[ppo] 1,824,768/2,000,000 (91.2%)  reward/step -0.1075  failures(last 100) 43%  slot RMSE(last 100) 0.51 m  kl 0.0026  value loss 0.435  651 steps/s  ETA 0:04:29
+[ppo] 1,826,816/2,000,000 (91.3%)  reward/step +0.0421  failures(last 100) 42%  slot RMSE(last 100) 0.50 m  kl 0.0017  value loss 0.199  651 steps/s  ETA 0:04:26
+[ppo] 1,828,864/2,000,000 (91.4%)  reward/step -0.1094  failures(last 100) 43%  slot RMSE(last 100) 0.49 m  kl 0.0025  value loss 1.710  651 steps/s  ETA 0:04:22
+[ppo] 1,830,912/2,000,000 (91.5%)  reward/step -0.1114  failures(last 100) 42%  slot RMSE(last 100) 0.49 m  kl 0.0025  value loss 2.024  651 steps/s  ETA 0:04:19
+[ppo] 1,832,960/2,000,000 (91.6%)  reward/step -0.2591  failures(last 100) 43%  slot RMSE(last 100) 0.50 m  kl 0.0033  value loss 1.890  651 steps/s  ETA 0:04:16
+[ppo] 1,835,008/2,000,000 (91.8%)  reward/step -0.1585  failures(last 100) 45%  slot RMSE(last 100) 0.50 m  kl 0.0037  value loss 1.342  651 steps/s  ETA 0:04:13
+[ppo] 1,837,056/2,000,000 (91.9%)  reward/step -0.2577  failures(last 100) 48%  slot RMSE(last 100) 0.50 m  kl 0.0027  value loss 0.547  651 steps/s  ETA 0:04:10
+[ppo] 1,839,104/2,000,000 (92.0%)  reward/step -0.0109  failures(last 100) 46%  slot RMSE(last 100) 0.50 m  kl 0.0024  value loss 0.736  651 steps/s  ETA 0:04:07
+[ppo] 1,841,152/2,000,000 (92.1%)  reward/step -0.2041  failures(last 100) 44%  slot RMSE(last 100) 0.49 m  kl 0.0036  value loss 0.643  651 steps/s  ETA 0:04:03
+[ppo] 1,843,200/2,000,000 (92.2%)  reward/step -0.1562  failures(last 100) 47%  slot RMSE(last 100) 0.50 m  kl 0.0024  value loss 0.791  652 steps/s  ETA 0:04:00
+[ppo] 1,845,248/2,000,000 (92.3%)  reward/step +0.0385  failures(last 100) 47%  slot RMSE(last 100) 0.50 m  kl 0.0032  value loss 0.503  652 steps/s  ETA 0:03:57
+[ppo] 1,847,296/2,000,000 (92.4%)  reward/step -0.2049  failures(last 100) 47%  slot RMSE(last 100) 0.50 m  kl 0.0028  value loss 0.641  652 steps/s  ETA 0:03:54
+[ppo] 1,849,344/2,000,000 (92.5%)  reward/step +0.0386  failures(last 100) 46%  slot RMSE(last 100) 0.50 m  kl 0.0029  value loss 0.624  652 steps/s  ETA 0:03:51
+[ppo] 1,851,392/2,000,000 (92.6%)  reward/step -0.0098  failures(last 100) 44%  slot RMSE(last 100) 0.50 m  kl 0.0029  value loss 0.797  652 steps/s  ETA 0:03:47
+[ppo] 1,853,440/2,000,000 (92.7%)  reward/step -0.0627  failures(last 100) 44%  slot RMSE(last 100) 0.51 m  kl 0.0038  value loss 1.415  652 steps/s  ETA 0:03:44
+[ppo] 1,855,488/2,000,000 (92.8%)  reward/step +0.0405  failures(last 100) 43%  slot RMSE(last 100) 0.51 m  kl 0.0035  value loss 0.108  652 steps/s  ETA 0:03:41
+[ppo] 1,857,536/2,000,000 (92.9%)  reward/step +0.0397  failures(last 100) 42%  slot RMSE(last 100) 0.50 m  kl 0.0037  value loss 0.309  652 steps/s  ETA 0:03:38
+[ppo] 1,859,584/2,000,000 (93.0%)  reward/step -0.1571  failures(last 100) 44%  slot RMSE(last 100) 0.51 m  kl 0.0024  value loss 3.331  652 steps/s  ETA 0:03:35
+[ppo] 1,861,632/2,000,000 (93.1%)  reward/step -0.2055  failures(last 100) 45%  slot RMSE(last 100) 0.51 m  kl 0.0023  value loss 0.920  652 steps/s  ETA 0:03:32
+[ppo] 1,863,680/2,000,000 (93.2%)  reward/step -0.0068  failures(last 100) 44%  slot RMSE(last 100) 0.50 m  kl 0.0029  value loss 0.301  652 steps/s  ETA 0:03:28
+[ppo] 1,865,728/2,000,000 (93.3%)  reward/step -0.0061  failures(last 100) 42%  slot RMSE(last 100) 0.49 m  kl 0.0032  value loss 0.763  652 steps/s  ETA 0:03:25
+[ppo] 1,867,776/2,000,000 (93.4%)  reward/step -0.0106  failures(last 100) 39%  slot RMSE(last 100) 0.48 m  kl 0.0022  value loss 0.364  652 steps/s  ETA 0:03:22
+[ppo] 1,869,824/2,000,000 (93.5%)  reward/step -0.0582  failures(last 100) 38%  slot RMSE(last 100) 0.48 m  kl 0.0024  value loss 1.199  653 steps/s  ETA 0:03:19
+[ppo] 1,871,872/2,000,000 (93.6%)  reward/step -0.1081  failures(last 100) 37%  slot RMSE(last 100) 0.48 m  kl 0.0024  value loss 1.051  653 steps/s  ETA 0:03:16
+[ppo] 1,873,920/2,000,000 (93.7%)  reward/step -0.0077  failures(last 100) 35%  slot RMSE(last 100) 0.47 m  kl 0.0029  value loss 0.278  653 steps/s  ETA 0:03:13
+[ppo] 1,875,968/2,000,000 (93.8%)  reward/step -0.0069  failures(last 100) 34%  slot RMSE(last 100) 0.47 m  kl 0.0038  value loss 0.467  653 steps/s  ETA 0:03:10
+[ppo] 1,878,016/2,000,000 (93.9%)  reward/step -0.2067  failures(last 100) 35%  slot RMSE(last 100) 0.47 m  kl 0.0030  value loss 1.505  653 steps/s  ETA 0:03:06
+[ppo] 1,880,064/2,000,000 (94.0%)  reward/step -0.1566  failures(last 100) 35%  slot RMSE(last 100) 0.47 m  kl 0.0021  value loss 1.236  653 steps/s  ETA 0:03:03
+[ppo] 1,882,112/2,000,000 (94.1%)  reward/step -0.1068  failures(last 100) 36%  slot RMSE(last 100) 0.47 m  kl 0.0034  value loss 0.196  653 steps/s  ETA 0:03:00
+[ppo] 1,884,160/2,000,000 (94.2%)  reward/step -0.1060  failures(last 100) 37%  slot RMSE(last 100) 0.47 m  kl 0.0024  value loss 0.902  653 steps/s  ETA 0:02:57
+[ppo] 1,886,208/2,000,000 (94.3%)  reward/step -0.1600  failures(last 100) 39%  slot RMSE(last 100) 0.47 m  kl 0.0026  value loss 0.367  653 steps/s  ETA 0:02:54
+[ppo] 1,888,256/2,000,000 (94.4%)  reward/step -0.1091  failures(last 100) 41%  slot RMSE(last 100) 0.47 m  kl 0.0022  value loss 1.481  653 steps/s  ETA 0:02:51
+[ppo] 1,890,304/2,000,000 (94.5%)  reward/step -0.0079  failures(last 100) 42%  slot RMSE(last 100) 0.47 m  kl 0.0024  value loss 0.072  653 steps/s  ETA 0:02:47
+[ppo] 1,892,352/2,000,000 (94.6%)  reward/step -0.0612  failures(last 100) 42%  slot RMSE(last 100) 0.47 m  kl 0.0031  value loss 0.945  653 steps/s  ETA 0:02:44
+[ppo] 1,894,400/2,000,000 (94.7%)  reward/step +0.0387  failures(last 100) 39%  slot RMSE(last 100) 0.47 m  kl 0.0028  value loss 0.380  653 steps/s  ETA 0:02:41
+[ppo] 1,896,448/2,000,000 (94.8%)  reward/step +0.0411  failures(last 100) 35%  slot RMSE(last 100) 0.46 m  kl 0.0026  value loss 0.349  654 steps/s  ETA 0:02:38
+[ppo] 1,898,496/2,000,000 (94.9%)  reward/step -0.0589  failures(last 100) 36%  slot RMSE(last 100) 0.46 m  kl 0.0025  value loss 2.672  654 steps/s  ETA 0:02:35
+[ppo] 1,900,544/2,000,000 (95.0%)  reward/step -0.1115  failures(last 100) 38%  slot RMSE(last 100) 0.48 m  kl 0.0050  value loss 2.525  654 steps/s  ETA 0:02:32
+[eval:periodic] steps 2,301,952  score 0.227 (best 0.788)  success 60%  slot RMSE 0.494 m  recovered 0/10
+[ppo] 1,902,592/2,000,000 (95.1%)  reward/step -0.0105  failures(last 100) 38%  slot RMSE(last 100) 0.48 m  kl 0.0036  value loss 1.112  654 steps/s  ETA 0:02:28
+[ppo] 1,904,640/2,000,000 (95.2%)  reward/step -0.2061  failures(last 100) 39%  slot RMSE(last 100) 0.48 m  kl 0.0025  value loss 5.502  654 steps/s  ETA 0:02:25
+[ppo] 1,906,688/2,000,000 (95.3%)  reward/step -0.0612  failures(last 100) 39%  slot RMSE(last 100) 0.48 m  kl 0.0030  value loss 1.957  654 steps/s  ETA 0:02:22
+[ppo] 1,908,736/2,000,000 (95.4%)  reward/step -0.1077  failures(last 100) 41%  slot RMSE(last 100) 0.49 m  kl 0.0033  value loss 3.572  654 steps/s  ETA 0:02:19
+[ppo] 1,910,784/2,000,000 (95.5%)  reward/step -0.1108  failures(last 100) 42%  slot RMSE(last 100) 0.49 m  kl 0.0037  value loss 2.019  654 steps/s  ETA 0:02:16
+[ppo] 1,912,832/2,000,000 (95.6%)  reward/step -0.0107  failures(last 100) 38%  slot RMSE(last 100) 0.49 m  kl 0.0015  value loss 0.906  654 steps/s  ETA 0:02:13
+[ppo] 1,914,880/2,000,000 (95.7%)  reward/step -0.0600  failures(last 100) 38%  slot RMSE(last 100) 0.49 m  kl 0.0031  value loss 1.859  654 steps/s  ETA 0:02:10
+[ppo] 1,916,928/2,000,000 (95.8%)  reward/step +0.0408  failures(last 100) 36%  slot RMSE(last 100) 0.49 m  kl 0.0030  value loss 0.012  654 steps/s  ETA 0:02:06
+[ppo] 1,918,976/2,000,000 (95.9%)  reward/step -0.1097  failures(last 100) 36%  slot RMSE(last 100) 0.49 m  kl 0.0028  value loss 2.888  654 steps/s  ETA 0:02:03
+[ppo] 1,921,024/2,000,000 (96.1%)  reward/step -0.0598  failures(last 100) 35%  slot RMSE(last 100) 0.50 m  kl 0.0033  value loss 1.840  655 steps/s  ETA 0:02:00
+[ppo] 1,923,072/2,000,000 (96.2%)  reward/step -0.1588  failures(last 100) 35%  slot RMSE(last 100) 0.50 m  kl 0.0028  value loss 3.189  655 steps/s  ETA 0:01:57
+[ppo] 1,925,120/2,000,000 (96.3%)  reward/step -0.0105  failures(last 100) 34%  slot RMSE(last 100) 0.49 m  kl 0.0030  value loss 0.994  655 steps/s  ETA 0:01:54
+[ppo] 1,927,168/2,000,000 (96.4%)  reward/step -0.0595  failures(last 100) 35%  slot RMSE(last 100) 0.50 m  kl 0.0026  value loss 1.458  655 steps/s  ETA 0:01:51
+[ppo] 1,929,216/2,000,000 (96.5%)  reward/step -0.0115  failures(last 100) 35%  slot RMSE(last 100) 0.50 m  kl 0.0058  value loss 0.802  655 steps/s  ETA 0:01:48
+[ppo] 1,931,264/2,000,000 (96.6%)  reward/step -0.0108  failures(last 100) 36%  slot RMSE(last 100) 0.50 m  kl 0.0043  value loss 0.947  655 steps/s  ETA 0:01:44
+[ppo] 1,933,312/2,000,000 (96.7%)  reward/step -0.0103  failures(last 100) 36%  slot RMSE(last 100) 0.50 m  kl 0.0051  value loss 1.091  655 steps/s  ETA 0:01:41
+[ppo] 1,935,360/2,000,000 (96.8%)  reward/step -0.0611  failures(last 100) 35%  slot RMSE(last 100) 0.50 m  kl 0.0024  value loss 1.583  655 steps/s  ETA 0:01:38
+[ppo] 1,937,408/2,000,000 (96.9%)  reward/step -0.1089  failures(last 100) 36%  slot RMSE(last 100) 0.51 m  kl 0.0029  value loss 2.782  655 steps/s  ETA 0:01:35
+[ppo] 1,939,456/2,000,000 (97.0%)  reward/step -0.0078  failures(last 100) 34%  slot RMSE(last 100) 0.50 m  kl 0.0028  value loss 0.787  655 steps/s  ETA 0:01:32
+[ppo] 1,941,504/2,000,000 (97.1%)  reward/step -0.1108  failures(last 100) 33%  slot RMSE(last 100) 0.50 m  kl 0.0033  value loss 2.259  655 steps/s  ETA 0:01:29
+[ppo] 1,943,552/2,000,000 (97.2%)  reward/step -0.0606  failures(last 100) 35%  slot RMSE(last 100) 0.51 m  kl 0.0028  value loss 2.064  655 steps/s  ETA 0:01:26
+[ppo] 1,945,600/2,000,000 (97.3%)  reward/step -0.0163  failures(last 100) 33%  slot RMSE(last 100) 0.50 m  kl 0.0030  value loss 0.976  655 steps/s  ETA 0:01:23
+[ppo] 1,947,648/2,000,000 (97.4%)  reward/step -0.1622  failures(last 100) 34%  slot RMSE(last 100) 0.52 m  kl 0.0031  value loss 2.979  655 steps/s  ETA 0:01:19
+[ppo] 1,949,696/2,000,000 (97.5%)  reward/step -0.2605  failures(last 100) 37%  slot RMSE(last 100) 0.53 m  kl 0.0031  value loss 4.927  655 steps/s  ETA 0:01:16
+[ppo] 1,951,744/2,000,000 (97.6%)  reward/step -0.0172  failures(last 100) 38%  slot RMSE(last 100) 0.53 m  kl 0.0031  value loss 1.712  656 steps/s  ETA 0:01:13
+[ppo] 1,953,792/2,000,000 (97.7%)  reward/step -0.0648  failures(last 100) 37%  slot RMSE(last 100) 0.53 m  kl 0.0014  value loss 0.939  656 steps/s  ETA 0:01:10
+[ppo] 1,955,840/2,000,000 (97.8%)  reward/step -0.1105  failures(last 100) 38%  slot RMSE(last 100) 0.54 m  kl 0.0026  value loss 2.820  656 steps/s  ETA 0:01:07
+[ppo] 1,957,888/2,000,000 (97.9%)  reward/step -0.2075  failures(last 100) 39%  slot RMSE(last 100) 0.54 m  kl 0.0026  value loss 4.738  656 steps/s  ETA 0:01:04
+[ppo] 1,959,936/2,000,000 (98.0%)  reward/step -0.1658  failures(last 100) 41%  slot RMSE(last 100) 0.55 m  kl 0.0036  value loss 3.379  656 steps/s  ETA 0:01:01
+[ppo] 1,961,984/2,000,000 (98.1%)  reward/step -0.1600  failures(last 100) 43%  slot RMSE(last 100) 0.56 m  kl 0.0020  value loss 3.477  656 steps/s  ETA 0:00:57
+[ppo] 1,964,032/2,000,000 (98.2%)  reward/step +0.0297  failures(last 100) 43%  slot RMSE(last 100) 0.56 m  kl 0.0031  value loss 0.065  656 steps/s  ETA 0:00:54
+[ppo] 1,966,080/2,000,000 (98.3%)  reward/step -0.0619  failures(last 100) 42%  slot RMSE(last 100) 0.57 m  kl 0.0031  value loss 1.439  656 steps/s  ETA 0:00:51
+[ppo] 1,968,128/2,000,000 (98.4%)  reward/step -0.3146  failures(last 100) 47%  slot RMSE(last 100) 0.58 m  kl 0.0024  value loss 4.589  656 steps/s  ETA 0:00:48
+[ppo] 1,970,176/2,000,000 (98.5%)  reward/step +0.0308  failures(last 100) 45%  slot RMSE(last 100) 0.58 m  kl 0.0029  value loss 0.074  656 steps/s  ETA 0:00:45
+[ppo] 1,972,224/2,000,000 (98.6%)  reward/step -0.1667  failures(last 100) 45%  slot RMSE(last 100) 0.59 m  kl 0.0024  value loss 4.267  656 steps/s  ETA 0:00:42
+[ppo] 1,974,272/2,000,000 (98.7%)  reward/step -0.2114  failures(last 100) 48%  slot RMSE(last 100) 0.61 m  kl 0.0022  value loss 2.907  656 steps/s  ETA 0:00:39
+[ppo] 1,976,320/2,000,000 (98.8%)  reward/step -0.1645  failures(last 100) 51%  slot RMSE(last 100) 0.62 m  kl 0.0034  value loss 1.847  656 steps/s  ETA 0:00:36
+[ppo] 1,978,368/2,000,000 (98.9%)  reward/step -0.0624  failures(last 100) 49%  slot RMSE(last 100) 0.61 m  kl 0.0020  value loss 1.187  656 steps/s  ETA 0:00:32
+[ppo] 1,980,416/2,000,000 (99.0%)  reward/step -0.0670  failures(last 100) 47%  slot RMSE(last 100) 0.60 m  kl 0.0033  value loss 1.109  656 steps/s  ETA 0:00:29
+[ppo] 1,982,464/2,000,000 (99.1%)  reward/step -0.0669  failures(last 100) 46%  slot RMSE(last 100) 0.61 m  kl 0.0037  value loss 0.924  656 steps/s  ETA 0:00:26
+[ppo] 1,984,512/2,000,000 (99.2%)  reward/step -0.1653  failures(last 100) 48%  slot RMSE(last 100) 0.62 m  kl 0.0029  value loss 1.170  656 steps/s  ETA 0:00:23
+[ppo] 1,986,560/2,000,000 (99.3%)  reward/step -0.1127  failures(last 100) 48%  slot RMSE(last 100) 0.62 m  kl 0.0018  value loss 0.530  656 steps/s  ETA 0:00:20
+[ppo] 1,988,608/2,000,000 (99.4%)  reward/step -0.2118  failures(last 100) 48%  slot RMSE(last 100) 0.62 m  kl 0.0020  value loss 1.475  656 steps/s  ETA 0:00:17
+[ppo] 1,990,656/2,000,000 (99.5%)  reward/step -0.0728  failures(last 100) 49%  slot RMSE(last 100) 0.63 m  kl 0.0038  value loss 1.118  656 steps/s  ETA 0:00:14
+[ppo] 1,992,704/2,000,000 (99.6%)  reward/step -0.1114  failures(last 100) 46%  slot RMSE(last 100) 0.63 m  kl 0.0017  value loss 2.019  657 steps/s  ETA 0:00:11
+[ppo] 1,994,752/2,000,000 (99.7%)  reward/step -0.2675  failures(last 100) 50%  slot RMSE(last 100) 0.64 m  kl 0.0027  value loss 1.334  657 steps/s  ETA 0:00:07
+[ppo] 1,996,800/2,000,000 (99.8%)  reward/step -0.1197  failures(last 100) 51%  slot RMSE(last 100) 0.65 m  kl 0.0035  value loss 1.015  657 steps/s  ETA 0:00:04
+[ppo] 1,998,848/2,000,000 (99.9%)  reward/step -0.2175  failures(last 100) 50%  slot RMSE(last 100) 0.65 m  kl 0.0026  value loss 1.560  657 steps/s  ETA 0:00:01
+[ppo] 2,000,000/2,000,000 (100.0%)  reward/step +0.0340  failures(last 100) 50%  slot RMSE(last 100) 0.65 m  kl 0.0012  value loss 0.321  657 steps/s  ETA 0:00:00
+[eval:periodic] steps 2,401,408  score 0.196 (best 0.788)  success 60%  slot RMSE 0.615 m  recovered 0/10
+
+=== Stage 3, seed 0: Full benchmark: repeated crossings, static spheres and wind gusts ===
+[eval:start] steps 501,760  score 0.496 (best 0.496)  success 85%  slot RMSE 0.945 m  recovered 9/20  -> new best, saved best.pt
+PPO: 2,000,000 environment steps over 8 parallel environments (parameter-sharing PPO; local critic (IPPO); separate critic network; tanh Gaussian velocity actions)
+[critic_warmup] 2,048/2,000,000 (0.1%)  reward/step -0.0810  failures(last 100) 100%  slot RMSE(last 100) 1.90 m  kl 0.0000  value loss 3.253  758 steps/s  ETA 0:43:56
+[critic_warmup] 4,096/2,000,000 (0.2%)  reward/step -0.0618  failures(last 100) 25%  slot RMSE(last 100) 1.22 m  kl 0.0000  value loss 2.858  772 steps/s  ETA 0:43:04
+[critic_warmup] 6,144/2,000,000 (0.3%)  reward/step +0.0092  failures(last 100) 20%  slot RMSE(last 100) 1.12 m  kl 0.0000  value loss 0.117  781 steps/s  ETA 0:42:34
+[critic_warmup] 8,192/2,000,000 (0.4%)  reward/step -0.0133  failures(last 100) 12%  slot RMSE(last 100) 0.98 m  kl 0.0000  value loss 0.133  782 steps/s  ETA 0:42:26
+[critic_warmup] 10,240/2,000,000 (0.5%)  reward/step -0.0679  failures(last 100) 16%  slot RMSE(last 100) 1.12 m  kl 0.0000  value loss 2.423  782 steps/s  ETA 0:42:25
+[ppo] 12,288/2,000,000 (0.6%)  reward/step +0.0105  failures(last 100) 12%  slot RMSE(last 100) 1.03 m  kl 0.0098  value loss 0.324  768 steps/s  ETA 0:43:07
+[ppo] 14,336/2,000,000 (0.7%)  reward/step -0.0072  failures(last 100) 11%  slot RMSE(last 100) 0.97 m  kl 0.0101  value loss 0.172  758 steps/s  ETA 0:43:40
+[ppo] 16,384/2,000,000 (0.8%)  reward/step -0.0430  failures(last 100) 12%  slot RMSE(last 100) 1.02 m  kl 0.0102  value loss 2.695  752 steps/s  ETA 0:43:57
+[ppo] 18,432/2,000,000 (0.9%)  reward/step -0.0474  failures(last 100) 14%  slot RMSE(last 100) 0.98 m  kl 0.0102  value loss 1.483  743 steps/s  ETA 0:44:25
+[ppo] 20,480/2,000,000 (1.0%)  reward/step +0.0194  failures(last 100) 12%  slot RMSE(last 100) 0.97 m  kl 0.0076  value loss 0.188  741 steps/s  ETA 0:44:30
+[ppo] 22,528/2,000,000 (1.1%)reward/step -0.0480  failures(last 100) 13%  slot RMSE(last 100) 0.98 m  kl 0.0187  value loss 2.317  722 steps/s  ETA 0:45:40
+[ppo] 24,576/2,000,000 (1.2%)reward/step -0.0454  failures(last 100) 14%  slot RMSE(last 100) 0.99 m  kl 0.0215  value loss 2.046  722 steps/s  ETA 0:45:34
+[ppo] 26,624/2,000,000 (1.3%)reward/step -0.1623  failures(last 100) 18%  slot RMSE(last 100) 1.00 m  kl 0.0104  value loss 4.993  716 steps/s  ETA 0:45:56
+[ppo] 28,672/2,000,000 (1.4%)reward/step -0.0773  failures(last 100) 20%  slot RMSE(last 100) 1.01 m  kl 0.0118  value loss 3.110  717 steps/s  ETA 0:45:50
+[ppo] 30,720/2,000,000 (1.5%)reward/step -0.0863  failures(last 100) 21%  slot RMSE(last 100) 0.94 m  kl 0.0117  value loss 3.418  715 steps/s  ETA 0:45:52
+[ppo] 32,768/2,000,000 (1.6%)reward/step -0.0966  failures(last 100) 22%  slot RMSE(last 100) 0.94 m  kl 0.0101  value loss 3.112  715 steps/s  ETA 0:45:50
+[ppo] 34,816/2,000,000 (1.7%)reward/step -0.0512  failures(last 100) 22%  slot RMSE(last 100) 0.94 m  kl 0.0137  value loss 1.435  712 steps/s  ETA 0:45:58
+[ppo] 36,864/2,000,000 (1.8%)reward/step -0.0475  failures(last 100) 22%  slot RMSE(last 100) 0.95 m  kl 0.0084  value loss 1.329  711 steps/s  ETA 0:46:01
+[ppo] 38,912/2,000,000 (1.9%)reward/step -0.0114  failures(last 100) 21%  slot RMSE(last 100) 0.94 m  kl 0.0069  value loss 0.175  711 steps/s  ETA 0:45:58
+[ppo] 40,960/2,000,000 (2.0%)reward/step -0.1459  failures(last 100) 22%  slot RMSE(last 100) 0.94 m  kl 0.0080  value loss 2.617  709 steps/s  ETA 0:46:03
+[ppo] 43,008/2,000,000 (2.2%)reward/step -0.1217  failures(last 100) 22%  slot RMSE(last 100) 0.96 m  kl 0.0106  value loss 1.314  705 steps/s  ETA 0:46:16
+[ppo] 45,056/2,000,000 (2.3%)reward/step -0.1428  failures(last 100) 22%  slot RMSE(last 100) 1.00 m  kl 0.0112  value loss 2.263  695 steps/s  ETA 0:46:51
+[ppo] 47,104/2,000,000 (2.4%)reward/step +0.0097  failures(last 100) 21%  slot RMSE(last 100) 0.99 m  kl 0.0065  value loss 0.058  686 steps/s  ETA 0:47:27
+[ppo] 49,152/2,000,000 (2.5%)reward/step -0.1498  failures(last 100) 24%  slot RMSE(last 100) 1.01 m  kl 0.0087  value loss 2.329  681 steps/s  ETA 0:47:43
+[ppo] 51,200/2,000,000 (2.6%)reward/step -0.1280  failures(last 100) 26%  slot RMSE(last 100) 1.03 m  kl 0.0104  value loss 2.083  682 steps/s  ETA 0:47:37
+[ppo] 53,248/2,000,000 (2.7%)reward/step -0.1476  failures(last 100) 28%  slot RMSE(last 100) 1.03 m  kl 0.0085  value loss 2.279  680 steps/s  ETA 0:47:42
+[ppo] 55,296/2,000,000 (2.8%)reward/step -0.0338  failures(last 100) 29%  slot RMSE(last 100) 1.04 m  kl 0.0065  value loss 0.942  678 steps/s  ETA 0:47:46
+[ppo] 57,344/2,000,000 (2.9%)reward/step +0.0454  failures(last 100) 29%  slot RMSE(last 100) 1.01 m  kl 0.0083  value loss 0.042  679 steps/s  ETA 0:47:42
+[ppo] 59,392/2,000,000 (3.0%)reward/step +0.0278  failures(last 100) 27%  slot RMSE(last 100) 0.99 m  kl 0.0079  value loss 0.537  676 steps/s  ETA 0:47:49
+[ppo] 61,440/2,000,000 (3.1%)reward/step -0.0438  failures(last 100) 28%  slot RMSE(last 100) 0.99 m  kl 0.0094  value loss 0.856  676 steps/s  ETA 0:47:45
+[ppo] 63,488/2,000,000 (3.2%)reward/step -0.0247  failures(last 100) 29%  slot RMSE(last 100) 0.98 m  kl 0.0088  value loss 0.831  676 steps/s  ETA 0:47:43
+[ppo] 65,536/2,000,000 (3.3%)reward/step -0.0386  failures(last 100) 29%  slot RMSE(last 100) 0.98 m  kl 0.0083  value loss 1.793  674 steps/s  ETA 0:47:48
+[ppo] 67,584/2,000,000 (3.4%)reward/step -0.0435  failures(last 100) 28%  slot RMSE(last 100) 0.97 m  kl 0.0081  value loss 0.938  671 steps/s  ETA 0:47:59
+[ppo] 69,632/2,000,000 (3.5%)reward/step -0.1698  failures(last 100) 27%  slot RMSE(last 100) 0.97 m  kl 0.0075  value loss 1.917  668 steps/s  ETA 0:48:07
+[ppo] 71,680/2,000,000 (3.6%)reward/step -0.0520  failures(last 100) 28%  slot RMSE(last 100) 0.97 m  kl 0.0076  value loss 0.625  667 steps/s  ETA 0:48:10
+[ppo] 73,728/2,000,000 (3.7%)reward/step -0.1284  failures(last 100) 28%  slot RMSE(last 100) 1.00 m  kl 0.0123  value loss 0.968  666 steps/s  ETA 0:48:13
+[ppo] 75,776/2,000,000 (3.8%)reward/step -0.1819  failures(last 100) 29%  slot RMSE(last 100) 1.02 m  kl 0.0093  value loss 1.885  664 steps/s  ETA 0:48:19
+[ppo] 77,824/2,000,000 (3.9%)reward/step -0.0255  failures(last 100) 28%  slot RMSE(last 100) 1.03 m  kl 0.0113  value loss 0.354  662 steps/s  ETA 0:48:21
+[ppo] 79,872/2,000,000 (4.0%)reward/step -0.0404  failures(last 100) 28%  slot RMSE(last 100) 1.04 m  kl 0.0076  value loss 0.139  661 steps/s  ETA 0:48:23
+[ppo] 81,920/2,000,000 (4.1%)reward/step -0.1568  failures(last 100) 31%  slot RMSE(last 100) 1.07 m  kl 0.0077  value loss 2.940  649 steps/s  ETA 0:49:13
+[ppo] 83,968/2,000,000 (4.2%)reward/step -0.0678  failures(last 100) 31%  slot RMSE(last 100) 1.05 m  kl 0.0092  value loss 1.159  637 steps/s  ETA 0:50:07
+[ppo] 86,016/2,000,000 (4.3%)reward/step +0.0405  failures(last 100) 29%  slot RMSE(last 100) 1.00 m  kl 0.0076  value loss 0.466  628 steps/s  ETA 0:50:46
+[ppo] 88,064/2,000,000 (4.4%)reward/step -0.1268  failures(last 100) 31%  slot RMSE(last 100) 0.92 m  kl 0.0087  value loss 1.492  626 steps/s  ETA 0:50:52
+[ppo] 90,112/2,000,000 (4.5%)reward/step -0.0798  failures(last 100) 30%  slot RMSE(last 100) 0.90 m  kl 0.0051  value loss 1.282  625 steps/s  ETA 0:50:58
+[ppo] 92,160/2,000,000 (4.6%)reward/step -0.1288  failures(last 100) 32%  slot RMSE(last 100) 0.91 m  kl 0.0079  value loss 1.227  623 steps/s  ETA 0:51:03
+[ppo] 94,208/2,000,000 (4.7%)reward/step -0.0347  failures(last 100) 30%  slot RMSE(last 100) 0.87 m  kl 0.0061  value loss 0.476  619 steps/s  ETA 0:51:17
+[ppo] 96,256/2,000,000 (4.8%)reward/step -0.2093  failures(last 100) 32%  slot RMSE(last 100) 0.87 m  kl 0.0079  value loss 1.435  616 steps/s  ETA 0:51:28
+[ppo] 98,304/2,000,000 (4.9%)reward/step -0.1356  failures(last 100) 35%  slot RMSE(last 100) 0.89 m  kl 0.0073  value loss 1.243  615 steps/s  ETA 0:51:34

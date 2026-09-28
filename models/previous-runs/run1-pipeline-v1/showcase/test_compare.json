@@ -1,0 +1,104 @@
+{
+  "reports": [
+    "models/showcase/test_baseline.json",
+    "models/showcase/test_learned.json"
+  ],
+  "summary": {
+    "hold": {
+      "success_rate": [
+        1.0,
+        1.0
+      ],
+      "mean_slot_rmse_m": [
+        0.01378077198116299,
+        0.1519701550776548
+      ],
+      "delta_success_rate": 0.0,
+      "delta_mean_slot_rmse_m": 0.1381893830964918
+    },
+    "follow": {
+      "success_rate": [
+        1.0,
+        1.0
+      ],
+      "mean_slot_rmse_m": [
+        0.013780771773872325,
+        0.18696426440737007
+      ],
+      "delta_success_rate": 0.0,
+      "delta_mean_slot_rmse_m": 0.17318349263349775
+    },
+    "crossing": {
+      "success_rate": [
+        1.0,
+        1.0
+      ],
+      "mean_slot_rmse_m": [
+        0.19473895934207724,
+        1.36021905849635
+      ],
+      "delta_success_rate": 0.0,
+      "delta_mean_slot_rmse_m": 1.1654800991542729
+    },
+    "head_on": {
+      "success_rate": [
+        1.0,
+        0.9
+      ],
+      "mean_slot_rmse_m": [
+        0.18175709403152962,
+        1.106442933567818
+      ],
+      "delta_success_rate": -0.09999999999999998,
+      "delta_mean_slot_rmse_m": 0.9246858395362885
+    },
+    "double_crossing": {
+      "success_rate": [
+        1.0,
+        0.0
+      ],
+      "mean_slot_rmse_m": [
+        0.2722901400798299,
+        1.7985737783511522
+      ],
+      "delta_success_rate": -1.0,
+      "delta_mean_slot_rmse_m": 1.5262836382713223
+    },
+    "slalom": {
+      "success_rate": [
+        1.0,
+        1.0
+      ],
+      "mean_slot_rmse_m": [
+        0.39321482418322357,
+        2.6265698385587846
+      ],
+      "delta_success_rate": 0.0,
+      "delta_mean_slot_rmse_m": 2.233355014375561
+    },
+    "turn": {
+      "success_rate": [
+        1.0,
+        1.0
+      ],
+      "mean_slot_rmse_m": [
+        0.033296865115904364,
+        0.1869313123930084
+      ],
+      "delta_success_rate": 0.0,
+      "delta_mean_slot_rmse_m": 0.153634447277104
+    },
+    "gust": {
+      "success_rate": [
+        1.0,
+        1.0
+      ],
+      "mean_slot_rmse_m": [
+        0.12849188747427948,
+        0.1958945369034291
+      ],
+      "delta_success_rate": 0.0,
+      "delta_mean_slot_rmse_m": 0.06740264942914961
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "environment_steps": 2901120,
+  "target_environment_steps": 2901120,
+  "best_score": 0.9560757139282479,
+  "best_environment_steps": 1501184,
+  "updates_this_run": 392,
+  "training_seconds_this_run": 2502.9
+}

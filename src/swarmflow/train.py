@@ -19,6 +19,8 @@ from .policy import (CHECKPOINT_FORMAT, CHECKPOINT_FORMATS, OBSERVATION_KEYS, Ac
 # development validation uses 1000+ and the final held-out test uses 100000+.
 TRAINING_SEEDS = (0, 1000)
 SELECTION_SEED_START = 5000
+HARD_OBJECT_GAP_M = 2.0
+HARD_NEIGHBOR_GAP_M = 0.6
 
 
 def advantages(rewards, values, next_values, terminated, ended, gamma=0.99, lam=0.95):
@@ -96,22 +98,49 @@ class Worker:
             result["restored"] = True
         else:
             result["summary"] = env.summary()
+            # A replayed crash still counts: the episode failed before it was given another try.
+            result["failed"] = env.failure is not None or self.restores > 0
             self.start_episode()
         return result
 
 
-def _demo_tensors(data, labels, device):
-    return (tensors({k: np.concatenate(v) for k, v in data.items()}, device),
-            torch.as_tensor(np.concatenate(labels), dtype=torch.float32, device=device))
+def _hard_share(observation, radius):
+    """Per labelled state: True when an object is within 2 m or a neighbour within 0.6 m (surface gap)."""
+    near = torch.zeros(len(observation["self"]), dtype=torch.bool, device=observation["self"].device)
+    for key, limit in (("obstacles", HARD_OBJECT_GAP_M), ("neighbors", HARD_NEIGHBOR_GAP_M)):
+        rows = observation[key]
+        gap = rows[..., :3].norm(dim=-1) - rows[..., 6] - radius
+        near |= ((rows[..., 7] > 0.5) & (gap < limit)).any(-1)
+    return near.cpu().numpy()
+
+
+def _demo_tensors(data, labels, device, radius, hard_weight):
+    """Teacher dataset (observations, actions, sampling CDF or None, share of hard states)."""
+    observation = tensors({k: np.concatenate(v) for k, v in data.items()}, device)
+    target = torch.as_tensor(np.concatenate(labels), dtype=torch.float32, device=device)
+    near = _hard_share(observation, radius)
+    cdf = None
+    if hard_weight != 1.0:
+        weights = 1.0 + (hard_weight - 1.0) * near
+        cdf = np.cumsum(weights) / weights.sum()
+    return observation, target, cdf, float(near.mean())
+
+
+def _demo_ids(demo, count, rng):
+    """Sample demonstration indices; near-obstacle states are drawn hard_weight times more often."""
+    cdf = demo[2]
+    if cdf is None:
+        return rng.integers(0, len(demo[1]), count)
+    return np.minimum(np.searchsorted(cdf, rng.random(count)), len(cdf) - 1)
 
 
 def _fit_clone(model, optimizer, demo, epochs, rng, device, batch_size=1024):
-    batch, target = demo
+    batch, target = demo[0], demo[1]
     parameters = model.actor_parameters()
     losses = []
     for _ in range(epochs):
         losses = []
-        order = rng.permutation(len(target))
+        order = rng.permutation(len(target)) if demo[2] is None else _demo_ids(demo, len(target), rng)
         for start in range(0, len(target), batch_size):
             ids = torch.as_tensor(order[start:start + batch_size], device=device)
             loss = F.mse_loss(model.act({k: v[ids] for k, v in batch.items()}), target[ids])
@@ -152,15 +181,16 @@ def _collect(model, teacher, config, scenarios, steps, rng, device, data, labels
     return episodes, failures
 
 
-def clone(model, config, scenarios, steps, epochs, rng, device, rounds=0, noise=0.3, report=None):
+def clone(model, config, scenarios, steps, epochs, rng, device, rounds=0, noise=0.3, report=None,
+          teacher_margins=(0.35, 0.08), hard_weight=1.0):
     """Behavior cloning from the predictive controller, followed by DAgger rounds.
 
     Round 0 flies the teacher with injected action noise while recording its clean actions, so the
     data already contains states away from the slots. Every later round flies the current student,
     labels each state it visits with the teacher's action and refits on all data collected so far.
-    Returns the log rows and the aggregated (observations, teacher actions) dataset.
+    Returns the log rows and the aggregated teacher dataset.
     """
-    teacher = PredictiveController(config)
+    teacher = PredictiveController(config, *teacher_margins)
     optimizer = torch.optim.Adam(model.actor_parameters(), lr=5e-4)
     data = {key: [] for key in OBSERVATION_KEYS}
     labels = []
@@ -169,24 +199,25 @@ def clone(model, config, scenarios, steps, epochs, rng, device, rounds=0, noise=
     for round_index in range(rounds + 1):
         episodes, failures = _collect(model, teacher, config, scenarios, steps, rng, device, data, labels,
                                       noise if round_index == 0 else None)
-        demo = _demo_tensors(data, labels, device)
+        demo = _demo_tensors(data, labels, device, config.radius, hard_weight)
         mse = _fit_clone(model, optimizer, demo, epochs, rng, device)
         rows.append({"type": "behavior_cloning", "round": round_index,
                      "driver": "teacher with action noise" if round_index == 0 else "student (DAgger)",
                      "environment_steps": steps, "agent_samples": len(demo[1]), "epochs": epochs,
                      "driver_episodes_finished": episodes, "driver_failures": failures,
-                     "final_epoch_mse": mse})
+                     "hard_state_share": demo[3], "final_epoch_mse": mse})
         if report:
             report(rows[-1])
     return rows, demo
 
 
-def demonstrations(model, config, scenarios, steps, rng, device):
+def demonstrations(model, config, scenarios, steps, rng, device, teacher_margins=(0.35, 0.08), hard_weight=1.0):
     """Teacher-labelled states visited by the current student, without refitting (used by --continue)."""
     data = {key: [] for key in OBSERVATION_KEYS}
     labels = []
-    _collect(model, PredictiveController(config), config, scenarios, steps, rng, device, data, labels)
-    return _demo_tensors(data, labels, device)
+    _collect(model, PredictiveController(config, *teacher_margins), config, scenarios, steps, rng, device,
+             data, labels)
+    return _demo_tensors(data, labels, device, config.radius, hard_weight)
 
 
 def _clock(seconds):
@@ -200,7 +231,8 @@ def train(config, scenarios, total_steps=10000, horizon=128, epochs=4, seed=0,
           gamma=0.99, lam=0.95, clip=0.2, entropy=0.0, target_kl=0.03, dagger_rounds=0, clone_noise=0.3,
           init_log_std=None, critic_warmup=None, normalize_rewards=True, eval_every=25000, eval_seeds=5,
           eval_scenarios=None, snapshot_every=0, threads=None, continue_run=False, stage=None,
-          width=64, min_log_std=-3.0, bc_coef=1.0, bc_coef_end=0.1, bc_batch=1024, pipeline_version=None):
+          width=64, min_log_std=-3.0, bc_coef=1.0, bc_coef_end=0.5, bc_batch=1024, pipeline_version=None,
+          teacher_margins=(0.6, 0.25), hard_weight=1.0):
     """Train the shared drone policy and return the path of latest.pt.
 
     The output folder receives latest.pt (every update, for resuming), best.pt (highest selection
@@ -230,7 +262,8 @@ def train(config, scenarios, total_steps=10000, horizon=128, epochs=4, seed=0,
              "eval_every": eval_every, "eval_seeds": eval_seeds,
              "eval_scenarios": list(eval_scenarios or scenarios), "snapshot_every": snapshot_every,
              "seed": seed, "stage": stage, "bc_coef": bc_coef, "bc_coef_end": bc_coef_end, "bc_batch": bc_batch,
-             "pipeline_version": pipeline_version}
+             "pipeline_version": pipeline_version, "teacher_margins": [float(m) for m in teacher_margins],
+             "hard_weight": float(hard_weight)}
     central_critic = critic == "central"
     prior_steps = 0
     checkpoint = None
@@ -369,18 +402,19 @@ def train(config, scenarios, total_steps=10000, horizon=128, epochs=4, seed=0,
 
             def report(row):
                 write(log, row)
-                print(f"[clone] round {row['round']} ({row['driver']}): {row['agent_samples']:,} samples, "
-                      f"mse {row['final_epoch_mse']:.5f}, driver failures {row['driver_failures']}/"
-                      f"{row['driver_episodes_finished']}", flush=True)
+                print(f"[clone] round {row['round']} ({row['driver']}): {row['agent_samples']:,} samples "
+                      f"({row['hard_state_share']:.0%} near objects), mse {row['final_epoch_mse']:.5f}, "
+                      f"driver failures {row['driver_failures']}/{row['driver_episodes_finished']}", flush=True)
 
             _, demo = clone(model, config, hyper["scenarios"], clone_steps, clone_epochs, rng, device,
-                            dagger_rounds, clone_noise, report)
+                            dagger_rounds, clone_noise, report, hyper["teacher_margins"], hyper["hard_weight"])
             if resume:
                 with torch.no_grad():
                     model.log_std.clamp_(min=init_log_std)
         elif continue_run and previous.get("clone_steps") and hyper["bc_coef"] > 0:
             print("Rebuilding the teacher dataset for the imitation loss", flush=True)
-            demo = demonstrations(model, config, hyper["scenarios"], int(previous["clone_steps"]), rng, device)
+            demo = demonstrations(model, config, hyper["scenarios"], int(previous["clone_steps"]), rng, device,
+                                  hyper["teacher_margins"], hyper["hard_weight"])
         validate("start")
         last_validated = 0
         workers = [Worker(config, hyper["scenarios"], rng, hyper["failure_reset"]) for _ in range(n_envs)]
@@ -429,7 +463,7 @@ def train(config, scenarios, total_steps=10000, horizon=128, epochs=4, seed=0,
                         restores += int(r["restored"])
                     if r["summary"] is not None:
                         episodes += 1
-                        recent.append((r["summary"]["failure"] is not None, r["summary"]["slot_rmse_m"]))
+                        recent.append((r["failed"], r["summary"]["slot_rmse_m"]))
                 done_steps += n_envs
             with torch.no_grad():
                 last_value = model.value(tensors(stack_teams([w.observations for w in workers]), device),
@@ -483,7 +517,7 @@ def train(config, scenarios, total_steps=10000, horizon=128, epochs=4, seed=0,
                     else:
                         loss = policy_loss + 0.5 * value_loss - hyper["entropy"] * entropy_values.mean()
                         if demo is not None and bc_now > 0:
-                            ids = torch.as_tensor(rng.integers(0, len(demo[1]), hyper["bc_batch"]), device=device)
+                            ids = torch.as_tensor(_demo_ids(demo, hyper["bc_batch"], rng), device=device)
                             bc_loss = F.mse_loss(model.act({k: v[ids] for k, v in demo[0].items()}), demo[1][ids])
                             loss = loss + bc_now * bc_loss
                     if not torch.isfinite(loss):

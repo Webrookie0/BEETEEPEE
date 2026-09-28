@@ -1,6 +1,12 @@
 # How SwarmFlow trains its drone policy
 
-> **Current version: 2.** After the first full training run, stages 2 and 3 were fixed; see **Part C** at the end. Where Part C differs from the sections before it, Part C is current. The main differences are: cloning in every stage, an imitation loss inside PPO, an exploration floor, a per-drone crash penalty, a 1 m obstacle warning, a wider network, and a total time of about 6 h.
+> **Current version: 3.** After the first full training run, stages 2 and 3 were fixed (**Part C**). After the second run, the teacher was made more cautious and slalom was removed (**Part D**, at the end). Where a later part differs from an earlier one, the later part is current. Compared with the first sections, the main differences are:
+> - cloning in every stage, with a teacher that keeps 0.25–0.6 m clearance;
+> - an imitation loss inside PPO whose weight goes from 1.0 to 0.5;
+> - an exploration floor, a per-drone crash penalty and a 1 m obstacle warning;
+> - a wider network;
+> - 7 scenarios instead of 8 (no slalom);
+> - a total time of about 6 h.
 
 This document explains what the training does, why the old training finished in 2–5 minutes without learning, what was changed (and which research each change comes from), and how every part of the code works. It is written for preparing the presentation. The practical "which command do I run" steps are in [guide.md](guide.md).
 
@@ -893,3 +899,82 @@ caffeinate -i make run train      # or: make training (without the viewer)
 
 - Schmitt et al., *Kickstarting Deep Reinforcement Learning* (2018): <https://arxiv.org/abs/1803.03835>
 - The quadrotor-swarm training code used by Batra et al. and Huang et al.: <https://github.com/Zhehui-Huang/quad-swarm-rl> (the repository linked in `docs/research-plan.md`)
+
+---
+---
+
+# Part D: training version 3 (after the second full run) — current
+
+## 26. What the second run (version 2) showed
+
+| Stage | Result |
+| --- | --- |
+| **1** | Still perfect: 0.996. |
+| **2** | **Fixed.** Validation success on crossing and head-on reached 100%, the best score was 0.956, and it stayed stable until the end (0.949). |
+| **3** | The best score (0.861) came only 200k steps in. After that the score swung between 0.57 and 0.86, and formation precision drifted: hold slot error rose from 0.02 to 0.15–0.25 m. |
+| **Showcase** | 148/160 episodes without failure (was 138) and 66/80 disturbances recovered (was 38), against 160/160 and 80/80 for the baseline. Still **NOT LEARNED YET**. All 12 failures were collisions: slalom 8, head-on 2, double crossing 2. |
+
+## 27. Root cause, with the evidence
+
+1. **Every test collision was a graze.** The overlap was at most 2 cm. 7 were drone–object; 5 were drone–drone, all in slalom, where two neighbours squeeze together while going around a sphere.
+2. **The teacher itself passes at the edge.** The hand-coded controller keeps only **0.08 m** clearance in every obstacle scenario (minimum clearance 0.078–0.092 m). The student copies these knife-edge passes, and its velocity differs from the teacher's by 0.5–0.6 m/s near objects (0.06 m/s far from them). Any imitation error therefore turns into contact.
+3. **Imitation and reward pulled in opposite directions.** The reward warns from 1 m away, while the imitation target passes at 8 cm. As the imitation weight faded from 1.0 to 0.1, stage 3 drifted: the imitation loss rose from 0.002 to 0.005, and formation precision and recovery got worse.
+4. **Slalom is a different kind of problem.** Its static spheres sit on the formation slots for several seconds, so drones must leave their slots and squeeze past each other. It was the hardest scenario for every student we tried.
+5. **The training log hid replayed crashes.** With crash replay, a crash followed by a successful retry was not counted as a failure. The log showed 0–6% failures in stage 3, while there were really 815 collisions in 4,049 episodes (about 20%).
+
+## 28. The experiments that decided the fix (no full training needed)
+
+**Teacher alone, with wider safety margins** (8 scenarios × 6 unseen seeds):
+
+| Teacher margins (soft / hard) | Failures | Minimum clearance | Disturbances recovered | Slalom slot error |
+| --- | --- | --- | --- | --- |
+| 0.35 / 0.08 (baseline) | 0/48 | 0.078 m | 24/24 | 0.42 m |
+| 0.5 / 0.2 | 0/48 | 0.203 m | 24/24 | 0.53 m |
+| **0.6 / 0.25 (chosen)** | **0/48** | **0.260 m** | 24/24 (slowest 6.6 s) | 0.61 m |
+| 0.7 / 0.3 | 0/48 | 0.308 m | 24/24 (slowest 8.4 s) | 0.72 m |
+
+**Student after imitation only** (3 rounds of cloning + DAgger from the stage 1 model; 4 obstacle scenarios × 6 unseen seeds):
+
+| Version | Failures | Recovered | Crossing | Head-on | Double crossing | Slalom |
+| --- | --- | --- | --- | --- | --- | --- |
+| A: baseline teacher (what version 2 did) | 23/24 | 2/19 | 1/6 | 0/6 | 0/6 | 0/6 |
+| **B: cautious teacher 0.6 / 0.25** | **8/24** | **20/24** | **6/6** | **6/6** | 3/6 | 1/6 |
+| C: cautious teacher + 5× weight on near-object states | 14/24 | 11/23 | 5/6 | 0/6 | 3/6 | 2/6 |
+
+What the experiments show:
+
+- The **cautious teacher** is the fix: 23 failures became 8, before any PPO.
+- **Extra weight on near-object states made things worse**, so it is off by default. It is still available as `--hard-weight`.
+- **Slalom stays the weakest** scenario even with the cautious teacher.
+
+## 29. What version 3 changes
+
+| # | Change | Why | Code |
+| --- | --- | --- | --- |
+| 1 | While demonstrating, the teacher keeps a **0.6 m soft / 0.25 m hard** clearance margin. The baseline you compare against keeps its own 0.35 / 0.08, unchanged. | The student learns passes with about 26 cm to spare, so small imitation errors no longer cause contact. It also agrees with the reward's 1 m warning. | `baseline.PredictiveController(soft_margin, hard_margin)`, `train(teacher_margins=...)` |
+| 2 | The imitation weight goes from **1.0 to 0.5** over each stage (was 1.0 → 0.1). | The teacher never fails, so the student should stay close to it. Stage 3 degraded exactly as the weight faded. | `curriculum.COMMON` (`bc_coef_end`) |
+| 3 | **Slalom is removed** from stage 3 and from the showcase. The benchmark now has 7 scenarios and 140 test episodes. | Static spheres on the formation slots are a separate problem, and the one where the learned policy failed most. It remains in the environment, in the baseline tests, and in `swarmflow eval --scenarios slalom`. | `curriculum.SHOWCASE_SCENARIOS` |
+| 4 | `failures(last 100)` now counts episodes whose crash was replayed. | An honest training curve. | `train.Worker` |
+| 5 | Weighting of near-object states is available but **off** (`--hard-weight 1`). | It hurt in experiment C. | `train._demo_tensors` |
+| 6 | Pipeline version 3: version-2 folders are moved to `models/<name>-old-<date>` automatically. | Old and new runs never mix. | `curriculum.PIPELINE_VERSION` |
+
+Everything else from Part C stays: cloning + DAgger in every stage, the imitation loss inside PPO, the exploration floor, per-drone crash penalties, the 1 m warning, crash replay in stages 2–3, learning rate 1×10⁻⁴ in stages 2–3, and the 128-wide network.
+
+A tiny end-to-end run (stage 1 → 2 → 3 → showcase → viewer report, 64 steps per stage) and all 38 unit tests pass with these settings. So a long run will not stop on a code error, but only the full run can show the final quality.
+
+## 30. What to expect and watch
+
+- **`[clone]` in stages 2 and 3**: fewer `driver failures` in the DAgger rounds than version 2 had (15/52 in stage 2, 11/47 in stage 3).
+- **`[eval:start]` of stage 2**: crossing and head-on should succeed immediately. Version 2 started at 1/10 and 6/10.
+- **`failures(last 100)`**: now honest, so it may look higher than version 2's numbers even when the policy is better.
+- **Showcase minimum clearance**: it should be well above 0 (version 2 had −0.02 m, meaning contact).
+- **Time**: about 5.5–6 h. Stage 3 has one scenario fewer.
+
+## 31. Remaining risks, stated honestly
+
+- The acceptance check allows **zero** failures in 140 test episodes. A learned policy can still have a rare failure. If that happens, the next steps are:
+  - a larger teacher margin (`--teacher-margins 0.7 0.3`);
+  - more DAgger rounds;
+  - a longer stage 3;
+  - more training seeds.
+- The cautious teacher makes slightly bigger detours, and its slowest recovery was 6.6 s. The "95% recovered within 5 s" check can therefore still be tight on double crossings.

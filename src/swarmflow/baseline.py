@@ -7,8 +7,9 @@ from .geometry import limit_norm
 class PredictiveController:
     """Sampled local velocity planning; not ORCA and not a safety guarantee."""
 
-    def __init__(self, config):
+    def __init__(self, config, soft_margin=0.35, hard_margin=0.08):
         self.config = config
+        self.soft_margin, self.hard_margin = soft_margin, hard_margin
         directions = np.array([v for v in itertools.product((-1, 0, 1), repeat=3) if any(v)], dtype=float)
         directions /= np.linalg.norm(directions, axis=1, keepdims=True)
         self.candidates = np.concatenate([directions * speed for speed in (0.8, 1.6, config.max_speed)])
@@ -41,8 +42,8 @@ class PredictiveController:
                 continue
             other = rows[:, None, :3] + (rows[:, None, 3:6] + velocity) * self.times[None, :, None]
             gaps = np.linalg.norm(positions[:, None] - other[None], axis=-1) - rows[None, :, 6:7] - c.radius
-            cost += 180 * np.maximum(0, 0.35 - gaps).max(axis=(1, 2)) ** 2
-            cost += 20000 * np.maximum(0, 0.08 - gaps).max(axis=(1, 2)) ** 2
+            cost += 180 * np.maximum(0, self.soft_margin - gaps).max(axis=(1, 2)) ** 2
+            cost += 20000 * np.maximum(0, self.hard_margin - gaps).max(axis=(1, 2)) ** 2
         altitude = own[15] + positions[:, :, 2]
         cost += 5000 * (np.maximum(0, 0.6 - altitude).max(axis=1) ** 2 +
                         np.maximum(0, altitude - 9.4).max(axis=1) ** 2)

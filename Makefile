@@ -112,7 +112,7 @@ eval-stage2:
 eval-stage3:
 	$(PYTHON) -m swarmflow eval --policy learned \
 		--checkpoint $(MODELS)/stage3-seed$(SEED)/best.pt \
-		--scenarios hold follow crossing head_on double_crossing slalom turn gust --seeds $(SEEDS_N) \
+		--scenarios hold follow crossing head_on double_crossing turn gust --seeds $(SEEDS_N) \
 		--output $(MODELS)/stage3-seed$(SEED)/dev-evaluation.json
 
 showcase:

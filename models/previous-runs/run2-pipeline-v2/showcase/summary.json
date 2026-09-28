@@ -1,0 +1,360 @@
+{
+  "pipeline_version": 2,
+  "selected_run": "models/stage3-seed0",
+  "selected_environment_steps": 1701888,
+  "validation_score": 0.8614800617016488,
+  "candidates": [
+    {
+      "run": "models/stage3-seed0",
+      "score": 0.8614800617016488,
+      "environment_steps": 1701888,
+      "scenarios": [
+        "hold",
+        "follow",
+        "crossing",
+        "head_on",
+        "double_crossing",
+        "slalom",
+        "turn",
+        "gust"
+      ]
+    }
+  ],
+  "chain": [
+    "stage1-seed0",
+    "stage2-seed0",
+    "stage3-seed0"
+  ],
+  "stages": [
+    "Stage 1",
+    "Stage 2",
+    "Stage 3"
+  ],
+  "training_stages": [
+    {
+      "run": "stage1-seed0",
+      "label": "Stage 1",
+      "scenarios": [
+        "hold",
+        "follow",
+        "turn"
+      ],
+      "clone_steps": 10000,
+      "dagger_rounds": 3,
+      "environment_steps": 1000000,
+      "finished": true,
+      "best_score": 0.9963942896889605,
+      "best_environment_steps": 901120,
+      "training_seconds": 3019.8
+    },
+    {
+      "run": "stage2-seed0",
+      "label": "Stage 2",
+      "scenarios": [
+        "hold",
+        "follow",
+        "turn",
+        "crossing",
+        "head_on"
+      ],
+      "clone_steps": 20000,
+      "dagger_rounds": 3,
+      "environment_steps": 2901120,
+      "finished": true,
+      "best_score": 0.9560757139282479,
+      "best_environment_steps": 1501184,
+      "training_seconds": 2502.9
+    },
+    {
+      "run": "stage3-seed0",
+      "label": "Stage 3",
+      "scenarios": [
+        "hold",
+        "follow",
+        "crossing",
+        "head_on",
+        "double_crossing",
+        "slalom",
+        "turn",
+        "gust"
+      ],
+      "clone_steps": 20000,
+      "dagger_rounds": 3,
+      "environment_steps": 3501184,
+      "finished": true,
+      "best_score": 0.8614800617016488,
+      "best_environment_steps": 1701888,
+      "training_seconds": 6530.0
+    }
+  ],
+  "test_seeds": [
+    100000,
+    100019
+  ],
+  "test_scenarios": [
+    "hold",
+    "follow",
+    "crossing",
+    "head_on",
+    "double_crossing",
+    "slalom",
+    "turn",
+    "gust"
+  ],
+  "test_score_learned": 0.8146760959539904,
+  "test_score_baseline": 0.9615202714380663,
+  "learned_correctly": false,
+  "checks": [
+    {
+      "name": "No collisions or other failures",
+      "passed": false,
+      "detail": "148/160 episodes completed"
+    },
+    {
+      "name": ">= 95% of disturbances recovered within 5 s",
+      "passed": false,
+      "detail": "66/80 events"
+    },
+    {
+      "name": "Slot RMSE below 0.35 m when undisturbed",
+      "passed": true,
+      "detail": "hold 0.080 m, follow 0.052 m, turn 0.080 m"
+    }
+  ],
+  "scenarios": [
+    {
+      "scenario": "hold",
+      "baseline": {
+        "success_rate": 1.0,
+        "mean_slot_rmse_m": 0.01378077198116299,
+        "events": 0,
+        "recovered_events": 0,
+        "min_surface_clearance_m": 0.7642424181014246
+      },
+      "learned": {
+        "success_rate": 1.0,
+        "mean_slot_rmse_m": 0.08015909901594578,
+        "events": 0,
+        "recovered_events": 0,
+        "min_surface_clearance_m": 0.7642424181014246
+      }
+    },
+    {
+      "scenario": "follow",
+      "baseline": {
+        "success_rate": 1.0,
+        "mean_slot_rmse_m": 0.013780771773872325,
+        "events": 0,
+        "recovered_events": 0,
+        "min_surface_clearance_m": 0.7642424181014246
+      },
+      "learned": {
+        "success_rate": 1.0,
+        "mean_slot_rmse_m": 0.05174554781489601,
+        "events": 0,
+        "recovered_events": 0,
+        "min_surface_clearance_m": 0.7642424181014246
+      }
+    },
+    {
+      "scenario": "crossing",
+      "baseline": {
+        "success_rate": 1.0,
+        "mean_slot_rmse_m": 0.19473895934207724,
+        "events": 20,
+        "recovered_events": 20,
+        "min_surface_clearance_m": 0.07887460146687175
+      },
+      "learned": {
+        "success_rate": 1.0,
+        "mean_slot_rmse_m": 0.25667344978886153,
+        "events": 20,
+        "recovered_events": 20,
+        "min_surface_clearance_m": 0.027925766749812175
+      }
+    },
+    {
+      "scenario": "head_on",
+      "baseline": {
+        "success_rate": 1.0,
+        "mean_slot_rmse_m": 0.18175709403152962,
+        "events": 20,
+        "recovered_events": 20,
+        "min_surface_clearance_m": 0.08197782239323137
+      },
+      "learned": {
+        "success_rate": 0.9,
+        "mean_slot_rmse_m": 0.3323689958364331,
+        "events": 20,
+        "recovered_events": 18,
+        "min_surface_clearance_m": -0.018691857664509315
+      }
+    },
+    {
+      "scenario": "double_crossing",
+      "baseline": {
+        "success_rate": 1.0,
+        "mean_slot_rmse_m": 0.2722901400798299,
+        "events": 40,
+        "recovered_events": 40,
+        "min_surface_clearance_m": 0.07887460146687175
+      },
+      "learned": {
+        "success_rate": 0.9,
+        "mean_slot_rmse_m": 0.41958754819756194,
+        "events": 40,
+        "recovered_events": 32,
+        "min_surface_clearance_m": -0.009207904437591674
+      }
+    },
+    {
+      "scenario": "slalom",
+      "baseline": {
+        "success_rate": 1.0,
+        "mean_slot_rmse_m": 0.39321482418322357,
+        "events": 0,
+        "recovered_events": 0,
+        "min_surface_clearance_m": 0.09204856150151541
+      },
+      "learned": {
+        "success_rate": 0.6,
+        "mean_slot_rmse_m": 1.1703013427644973,
+        "events": 0,
+        "recovered_events": 0,
+        "min_surface_clearance_m": -0.01222760761032693
+      }
+    },
+    {
+      "scenario": "turn",
+      "baseline": {
+        "success_rate": 1.0,
+        "mean_slot_rmse_m": 0.033296865115904364,
+        "events": 0,
+        "recovered_events": 0,
+        "min_surface_clearance_m": 0.7642424181014246
+      },
+      "learned": {
+        "success_rate": 1.0,
+        "mean_slot_rmse_m": 0.07957859050810365,
+        "events": 0,
+        "recovered_events": 0,
+        "min_surface_clearance_m": 0.7642424181014246
+      }
+    },
+    {
+      "scenario": "gust",
+      "baseline": {
+        "success_rate": 1.0,
+        "mean_slot_rmse_m": 0.12849188747427948,
+        "events": 0,
+        "recovered_events": 0,
+        "min_surface_clearance_m": 0.7642424181014246
+      },
+      "learned": {
+        "success_rate": 1.0,
+        "mean_slot_rmse_m": 0.13995035554600915,
+        "events": 0,
+        "recovered_events": 0,
+        "min_surface_clearance_m": 0.7642424181014246
+      }
+    }
+  ],
+  "comparison": {
+    "hold": {
+      "success_rate": [
+        1.0,
+        1.0
+      ],
+      "mean_slot_rmse_m": [
+        0.01378077198116299,
+        0.08015909901594578
+      ],
+      "delta_success_rate": 0.0,
+      "delta_mean_slot_rmse_m": 0.06637832703478279
+    },
+    "follow": {
+      "success_rate": [
+        1.0,
+        1.0
+      ],
+      "mean_slot_rmse_m": [
+        0.013780771773872325,
+        0.05174554781489601
+      ],
+      "delta_success_rate": 0.0,
+      "delta_mean_slot_rmse_m": 0.03796477604102368
+    },
+    "crossing": {
+      "success_rate": [
+        1.0,
+        1.0
+      ],
+      "mean_slot_rmse_m": [
+        0.19473895934207724,
+        0.25667344978886153
+      ],
+      "delta_success_rate": 0.0,
+      "delta_mean_slot_rmse_m": 0.061934490446784285
+    },
+    "head_on": {
+      "success_rate": [
+        1.0,
+        0.9
+      ],
+      "mean_slot_rmse_m": [
+        0.18175709403152962,
+        0.3323689958364331
+      ],
+      "delta_success_rate": -0.09999999999999998,
+      "delta_mean_slot_rmse_m": 0.15061190180490347
+    },
+    "double_crossing": {
+      "success_rate": [
+        1.0,
+        0.9
+      ],
+      "mean_slot_rmse_m": [
+        0.2722901400798299,
+        0.41958754819756194
+      ],
+      "delta_success_rate": -0.09999999999999998,
+      "delta_mean_slot_rmse_m": 0.14729740811773206
+    },
+    "slalom": {
+      "success_rate": [
+        1.0,
+        0.6
+      ],
+      "mean_slot_rmse_m": [
+        0.39321482418322357,
+        1.1703013427644973
+      ],
+      "delta_success_rate": -0.4,
+      "delta_mean_slot_rmse_m": 0.7770865185812736
+    },
+    "turn": {
+      "success_rate": [
+        1.0,
+        1.0
+      ],
+      "mean_slot_rmse_m": [
+        0.033296865115904364,
+        0.07957859050810365
+      ],
+      "delta_success_rate": 0.0,
+      "delta_mean_slot_rmse_m": 0.04628172539219928
+    },
+    "gust": {
+      "success_rate": [
+        1.0,
+        1.0
+      ],
+      "mean_slot_rmse_m": [
+        0.12849188747427948,
+        0.13995035554600915
+      ],
+      "delta_success_rate": 0.0,
+      "delta_mean_slot_rmse_m": 0.011458468071729677
+    }
+  }
+}

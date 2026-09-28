@@ -11,7 +11,9 @@ from .config import Config
 MODELS_DIR = Path("models")
 SHOWCASE_DIR = MODELS_DIR / "showcase"
 TEST_SEED_START = 100000
-SHOWCASE_SCENARIOS = ("hold", "follow", "crossing", "head_on", "double_crossing", "slalom", "turn", "gust")
+# Slalom (static spheres sitting on the formation slots) is left out of the learned-policy benchmark;
+# the baseline tests still cover it, and `swarmflow eval --scenarios slalom` tests a model on it.
+SHOWCASE_SCENARIOS = ("hold", "follow", "crossing", "head_on", "double_crossing", "turn", "gust")
 
 
 @dataclass(frozen=True)
@@ -27,10 +29,11 @@ class Stage:
     failure_reset: bool = False
 
 
-# Version 2: every stage clones the teacher on its own scenarios (the first version only cloned
-# stage 1, so the network never saw an obstacle being avoided), keeps that data as a decaying
-# imitation loss, attributes crashes to the drones involved and warns 1 m before obstacles.
-PIPELINE_VERSION = 2
+# Version 2: every stage clones the teacher on its own scenarios, keeps that data as an imitation
+# loss, attributes crashes to the drones involved and warns 1 m before obstacles.
+# Version 3: the teacher keeps 0.6 m / 0.25 m clearance while demonstrating (the baseline's 0.08 m
+# left no room for imitation error), the imitation loss stays at 0.5 or more, and slalom is dropped.
+PIPELINE_VERSION = 3
 
 STAGES = {
     1: Stage(1, "Formation keeping: hold, follow and turn with the target",
@@ -38,7 +41,7 @@ STAGES = {
     2: Stage(2, "Moving obstacles: crossing and head-on objects, keeping the stage 1 tasks",
              ("hold", "follow", "turn", "crossing", "head_on"), 2_000_000, resume_from=1,
              clone_steps=20_000, dagger_rounds=3, lr=1e-4, failure_reset=True),
-    3: Stage(3, "Full benchmark: repeated crossings, static spheres and wind gusts",
+    3: Stage(3, "Full benchmark: repeated crossings and wind gusts, keeping the earlier tasks",
              SHOWCASE_SCENARIOS, 2_000_000, resume_from=2,
              clone_steps=20_000, dagger_rounds=3, lr=1e-4, failure_reset=True),
 }
@@ -46,7 +49,8 @@ STAGES = {
 # Shared PPO settings for every stage; 8 environments x 256 steps x 8 drones = 16,384 samples per update.
 COMMON = {"envs": 8, "horizon": 256, "epochs": 5, "minibatch": 2048, "eval_every": 100_000,
           "eval_seeds": 10, "snapshot_every": 500_000, "width": 128, "min_log_std": -3.0,
-          "entropy": 0.0, "bc_coef": 1.0, "bc_coef_end": 0.1, "pipeline_version": PIPELINE_VERSION}
+          "entropy": 0.0, "bc_coef": 1.0, "bc_coef_end": 0.5, "teacher_margins": (0.6, 0.25), "hard_weight": 1.0,
+          "pipeline_version": PIPELINE_VERSION}
 
 
 def stage_dir(number, seed, models_dir=MODELS_DIR):

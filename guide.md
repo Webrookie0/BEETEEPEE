@@ -37,10 +37,10 @@ caffeinate -i make run train
    - starts from stage 1's `best.pt`;
    - behavior cloning + DAgger on these obstacle scenarios, so the network learns avoidance from the teacher;
    - 2,000,000 PPO steps with an imitation loss that fades out over the stage.
-3. **Stage 3, the full benchmark** (adds repeated crossings, static spheres and wind), saved to `models/stage3-seed0/`: the same recipe, starting from stage 2's `best.pt`, 2,000,000 PPO steps.
+3. **Stage 3, the full benchmark** (adds repeated crossings and wind), saved to `models/stage3-seed0/`: the same recipe, starting from stage 2's `best.pt`, 2,000,000 PPO steps. Slalom, with static spheres on the formation slots, is not part of the learned-policy benchmark; see [training.md](training.md) Part D.
 4. **Showcase**:
    - picks the best final model (across all trained seeds);
-   - tests it against the hand-coded baseline on 8 scenarios × 20 seeds it has never seen;
+   - tests it against the hand-coded baseline on 7 scenarios × 20 seeds it has never seen;
    - stores everything in `models/showcase/`.
 
 Every 100,000 steps the model is validated. Whenever it beats its previous best it is saved as `best.pt`, and each stage continues from the previous stage's `best.pt`.
@@ -66,11 +66,11 @@ Every 100,000 steps the model is validated. Whenever it beats its previous best 
 | --- | --- |
 | Stage 1 (cloning ~8 min + 1M PPO steps) | about 1 h |
 | Stage 2 (cloning on obstacle scenarios ~15 min + 2M PPO steps) | about 2 h |
-| Stage 3 (the same on all 8 scenarios) | 2–2.5 h |
+| Stage 3 (the same on all 7 scenarios) | about 2 h |
 | Showcase test | about 10 min |
 | **Total** | **about 6 h** |
 
-This is version 2 of the training. After the first full run, stages 2 and 3 were fixed; [training.md](training.md) Part C explains why and what changed. When you start it, the first run's folders are moved to `models/<name>-old-<date>` automatically, and everything trains again. Nothing is deleted.
+This is version 3 of the training. [training.md](training.md) Part C covers the fixes after the first full run, and Part D covers the second run: a more cautious teacher, a stronger imitation loss, and slalom removed. When you start it, the older runs' folders are moved to `models/<name>-old-<date>` automatically, and everything trains again. Nothing is deleted.
 
 ### If it stops
 

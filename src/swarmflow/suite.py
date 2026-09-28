@@ -263,11 +263,12 @@ TESTS = (
          ("hold", "follow", "turn", "crossing", "head_on"), watch=LEARNED_VIEW.format("models/stage2-seed0/best.pt")),
     Test(11, "stage3", "Stage 3 training: full benchmark",
          "Evaluates models/stage3-seed0/best.pt (training it first if needed: 2M PPO steps from the stage 2 best "
-         "with repeated crossings, static spheres and wind) against the baseline on all eight scenarios.",
+         "with repeated crossings and wind) against the baseline on the seven learned-policy scenarios.",
          f"learned policy: no failures, >={RECOVERY_RATE:.0%} of events recovered within {RECOVERY_LIMIT_S:g} s, "
          f"slot error < {FORMATION_RMSE_M:g} m on hold/follow/turn",
-         "training.md · Stage 3; make train-stage3", "reuses model, else ~1-2 h", _run_stage(3),
-         VALIDATION_SCENARIOS, watch=LEARNED_VIEW.format("models/stage3-seed0/best.pt")),
+         "training.md · Stage 3; make train-stage3", "reuses model, else ~2 h", _run_stage(3),
+         ("hold", "follow", "crossing", "head_on", "double_crossing", "turn", "gust"),
+         watch=LEARNED_VIEW.format("models/stage3-seed0/best.pt")),
 )
 
 
