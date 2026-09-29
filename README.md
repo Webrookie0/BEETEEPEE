@@ -4,6 +4,8 @@ An independent reinforcement-learning environment for a drone swarm that follows
 
 Start with the [research and execution plan](docs/research-plan.md). It connects six primary research sources to concrete design decisions and distinguishes established results from hypotheses. The main recommendation is to learn swarm motion above a stable flight controller and study formation recovery explicitly.
 
+For the complete paper-by-paper explanation, equations, code links and implementation sequence, read **[context/README.md](context/README.md)**. It covers 30 research papers, current configuration, historical experiments and an inventory of the project files.
+
 ## Setup and run
 
 SwarmFlow runs locally on Python 3.12. From the project directory, install the environment and development dependencies:
